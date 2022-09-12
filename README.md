@@ -1,8 +1,8 @@
-# What's Octopus Robot dAPP
+# What
 Octopus Robot dAPP is a totally decentralized application which can help you connect different blockchain or web2. 
 
 
-# What you can do in this dAPP
+# How
 In this dAPP, you can create scripts which are composited by some subScripts.
 
 Every subScript could be a web2 request with web service or a web3 request with node of blockchain.
@@ -21,3 +21,6 @@ For some examples, you can:
 
 - ...
 
+# Why
+In Web3, almost all of the developers need to write script to implement some interactions between Web2 & Web3, which is a private and duplicated job I think.
+What they write in the script, only can be run by themselves, and the main logic is similiar too. And I think we could simplify these jobs and make the script run by everyone who is even not a developer.

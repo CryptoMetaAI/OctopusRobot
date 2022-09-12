@@ -162,6 +162,65 @@ export default function AddScript() {
         console.log(script);
     }
 
+    const handleChainContractOk = () => {
+        chainContractForm.validateFields()
+            .then(values => {
+                const newChainContractConfig = {
+                    title: values.title,
+                    chainId: values.chain,
+                    to: values.contractAddr
+                }
+                var from = null;
+                if (values['from'] != null) {
+                    if (values['from'].valueType == 'constant') 
+                        from = values['from'].address;
+                    else {
+                        from = {};
+                        from.step = values['from'].step; 
+                        if (script[from.step].element.type == 'pendingTx' || script[from.step].element.type == 'executedTx') {
+                            try {
+                                const obj = JSON.prarse(from.address);
+                                from.referenceType = obj.referenceType == 'from' ? 1 : 2;   // 1: ValueType.from  2: ValueType.to
+                            } catch (error) {
+                                from.referenceType = 5;  // ValueType.parameter
+                            }
+                        }
+                        from.address = values['from'].address;
+                    }
+                    newChainContractConfig.from = from;
+                }
+                setChainContractConfig(newChainContractConfig);
+                console.log(newChainContractConfig);
+                setConfigChainContractVisible(false);
+                if (currentScriptType == 'event') {
+                    setAddEventMonitorVisible(true);
+                } else if (currentScriptType == 'pendingTx' || currentScriptType == 'executedTx') {
+                    setAddPendingTxMonitorVisible(true);
+                } else if (currentScriptType == 'rFunc') {
+                    setSelectFunctionInContractVisible(true);
+                } else if (currentScriptType == 'wFunc') {
+                    setSelectFunctionInContractVisible(true);
+                }
+
+                var subScripts = localStorage.getItem('subScripts');
+                if (subScripts != null) {
+                    subScripts = JSON.parse(subScripts);
+                    if (subScripts[values.title] == null) {
+                        subScripts[values.title] = {}
+                    }
+                } else {
+                    subScripts = {}
+                    subScripts[values.title] = {}
+                }
+                subScripts[values.title]['type'] = currentScriptType;
+                subScripts[values.title]['chainContractConfig'] = values;
+                localStorage.setItem('subScripts', JSON.stringify(subScripts));
+            })
+            .catch(info => {
+                console.log('Validate Failed:', info);
+            });
+    }
+
     const handleEventMonitorOk = () => {
         eventMonitorForm.validateFields()
             .then(values => {
@@ -261,65 +320,6 @@ export default function AddScript() {
                 setDependencyConfigVisible(false); 
             }
         });
-    }
-
-    const handleChainContractOk = () => {
-        chainContractForm.validateFields()
-            .then(values => {
-                const newChainContractConfig = {
-                    title: values.title,
-                    chainId: values.chain,
-                    to: values.contractAddr
-                }
-                var from = null;
-                if (values['from'] != null) {
-                    if (values['from'].valueType == 'constant') 
-                        from = values['from'].address;
-                    else {
-                        from = {};
-                        from.step = values['from'].step; 
-                        if (script[from.step].element.type == 'pendingTx' || script[from.step].element.type == 'executedTx') {
-                            try {
-                                const obj = JSON.prarse(from.address);
-                                from.referenceType = obj.referenceType == 'from' ? 1 : 2;   // 1: ValueType.from  2: ValueType.to
-                            } catch (error) {
-                                from.referenceType = 5;  // ValueType.parameter
-                            }
-                        }
-                        from.address = values['from'].address;
-                    }
-                    newChainContractConfig.from = from;
-                }
-                setChainContractConfig(newChainContractConfig);
-                console.log(newChainContractConfig);
-                setConfigChainContractVisible(false);
-                if (currentScriptType == 'event') {
-                    setAddEventMonitorVisible(true);
-                } else if (currentScriptType == 'pendingTx' || currentScriptType == 'executedTx') {
-                    setAddPendingTxMonitorVisible(true);
-                } else if (currentScriptType == 'rFunc') {
-                    setSelectFunctionInContractVisible(true);
-                } else if (currentScriptType == 'wFunc') {
-                    setSelectFunctionInContractVisible(true);
-                }
-
-                var subScripts = localStorage.getItem('subScripts');
-                if (subScripts != null) {
-                    subScripts = JSON.parse(subScripts);
-                    if (subScripts[values.title] == null) {
-                        subScripts[values.title] = {}
-                    }
-                } else {
-                    subScripts = {}
-                    subScripts[values.title] = {}
-                }
-                subScripts[values.title]['type'] = 'event';
-                subScripts[values.title]['chainContractConfig'] = values;
-                localStorage.setItem('subScripts', JSON.stringify(subScripts));
-            })
-            .catch(info => {
-                console.log('Validate Failed:', info);
-            });
     }
 
     const handleSendTxOk = () => {
