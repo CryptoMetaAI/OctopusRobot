@@ -1,6 +1,20 @@
-# Getting Started with Create React App
+# Getting Started with Octopus Robot dAPP
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+In this dAPP, you can create scripts which are composited by some subScripts.
+
+Every subScript could be a web2 request with web service or a web3 request with node of blockchain.
+
+For some examples, you can:
+
+- read one coin's price from CEX, then write is to the contract deployed on ethereum.
+
+- monitor the events or transcations from the blockchain, then send a transaction to invoke the contract to execute expected action.
+
+- read data from web2, then check the value of contract on blockchain, if satisfy the condition, send a transaction.
+
+- set a timer, and mint NFTs automatically when the time comes
+
+- ...
 
 ## Available Scripts
 
