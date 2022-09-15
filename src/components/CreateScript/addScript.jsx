@@ -6,6 +6,7 @@ import { Link } from "react-router-dom";
 import moment from "moment";
 import Web3 from 'web3';
 import * as utils from '../../utils/utils';
+import Converter from './Converter';
 
 import { AvaxLogo, PolygonLogo, BSCLogo, ETHLogo } from "./Logos";
 import assert from 'assert';
@@ -91,11 +92,15 @@ export default function AddScript() {
     const [keyLoading, setKeyLoading] = useState(false);
     const [configChainContractVisible, setConfigChainContractVisible] = useState(false);
     const [chainContractConfig, setChainContractConfig] = useState({});
+    const [eventConfig, setEventConfig] = useState({});
+    const [txMonitorConfig, setTxMonitorConfig] = useState({});
     const [functionSelectedConfig, setFunctionSelectedConfig] = useState({});
+    const [dependencyConfig, setDependencyConfig] = useState({});
+    const [leftConfig, setLeftConfig] = useState({});
     const [modalTitle, setModalTitle] = useState('');
     const [currentScriptType, setCurrentScriptType] = useState('');
     const [addEventMonitorVisible, setAddEventMonitorVisible] = useState(false);
-    const [addPendingTxMonitorVisible, setAddPendingTxMonitorVisible] = useState(false);
+    const [addTxMonitorVisible, setAddTxMonitorVisible] = useState(false);
     const [selectFunctionInContractVisible, setSelectFunctionInContractVisible] = useState(false);
     const [newChainVisible, setNewChainVisible] = useState(false);
     const [importABIVisible, setImportABIVisible] = useState(false);
@@ -104,7 +109,12 @@ export default function AddScript() {
     const [curStep, SetCurStep] = useState(0);
     const [totalStep, SetTotalStep] = useState(0);
     const [dependencyLength, setDependencyLength] = useState(0);
-    const [initialValuesOfOne, setInitialValuesOfOne] = useState({});
+    const [initialValuesOfChainContract, setInitialValuesOfChainContract] = useState({});
+    const [initialValuesOfEvent, setInitialValuesOfEvent] = useState({});
+    const [initialValuesOfTxMonitor, setInitialValuesOfTxMonitor] = useState({});
+    const [initialValuesOfFunctionSelected, setInitialValuesOfFunctionSelected] = useState({});
+    const [initialValuesOfDependency, setInitialValuesOfDependency] = useState({});
+    const [initialValuesOfLeftConfig, setInitialValuesOfLeftConfig] = useState({});
     const [modifyScript, setModifyScript] = useState(false);
     const [curModifiedTitle, setCurModifiedTitle] = useState('');
     const [curScriptTitle, setCurScriptTitle] = useState(script.title);
@@ -120,6 +130,7 @@ export default function AddScript() {
     const [leftConfigForm] = Form.useForm();
 
     var importedABI = '';
+    const converter = new Converter(script);
 
     const contractAddr = Form.useWatch('contractAddr', chainContractForm);
     const currentChain = Form.useWatch('chain', chainContractForm);
@@ -130,7 +141,19 @@ export default function AddScript() {
     const readDataFunction = Form.useWatch('function', functionSelectedForm);
     const repeaTimes = Form.useWatch('repeaTimes', leftConfigForm);
 
-    useEffect(() => chainContractForm.resetFields(), [initialValuesOfOne]);
+    useEffect(() => {
+        chainContractForm.resetFields();
+        eventMonitorForm.resetFields();
+        pendingTxMonitorForm.resetFields();
+        functionSelectedForm.resetFields();
+        dependencyConfigForm.resetFields();
+        leftConfigForm.resetFields();
+    }, [initialValuesOfChainContract, 
+        initialValuesOfEvent, 
+        initialValuesOfTxMonitor, 
+        initialValuesOfFunctionSelected,
+        initialValuesOfDependency,
+        initialValuesOfLeftConfig]);
 
     useEffect(() => {
         return function () {
@@ -143,7 +166,7 @@ export default function AddScript() {
                     script.title =  curScriptTitle;
                 } else {
                     var randomTitle = Math.floor(100000 * (Math.random() + 1));
-                    while(scripts[randomTitle] != null) randomTitle = Math.floor(100000 * (Math.random() + 1));
+                    while(scripts[randomTitle] != null) randomTitle = 'title-' + Math.floor(100000 * (Math.random() + 1));
                     script.title =  randomTitle;
                 }
             }
@@ -154,67 +177,69 @@ export default function AddScript() {
         }
     });
 
-    const updateScript = (chainContractConfig, event) => {
+    const updateScript = (currentValues) => {
         if (modifyScript && chainContractConfig.title != curModifiedTitle) {
-            delete script[curModifiedTitle];
+            delete script['subScripts'][curModifiedTitle];
         }
-        script[chainContractConfig.title] = {...chainContractConfig, ...event};
+        if (script['subScripts'] == null) {
+            script['subScripts'] = {};
+        }
+        if (currentScriptType == 'event') {
+            script['subScripts'][chainContractConfig.title] = {type: currentScriptType, chainContractConfig, eventConfig: currentValues}
+        } else if (currentScriptType == 'pendingTx' || currentScriptType == 'executedTx') {
+            script['subScripts'][chainContractConfig.title] = {type: currentScriptType, chainContractConfig, txMonitorConfig: currentValues}
+        } else if (currentScriptType == 'rFunc') {
+            script['subScripts'][chainContractConfig.title] = {type: currentScriptType, chainContractConfig, functionSelectedConfig, dependencyConfig: currentValues}
+        } else if (currentScriptType == 'wFunc') {
+            script['subScripts'][chainContractConfig.title] = {type: currentScriptType, chainContractConfig, functionSelectedConfig, dependencyConfig, leftConfig: currentValues}
+        }
         console.log(script);
     }
 
+    const clearInitialValues = () => {
+        setInitialValuesOfChainContract({});
+        setInitialValuesOfEvent({});
+        setInitialValuesOfFunctionSelected({});
+        setInitialValuesOfTxMonitor({});
+        setInitialValuesOfDependency({});
+        setInitialValuesOfLeftConfig({});
+    }
+
+    const getSubScripts = () => {
+        return script['subScripts'] == null ? {} : script['subScripts'];
+    }
+
+    const getSubScript = (subScriptTitle) => {
+        if (script['subScripts'] == null || script['subScripts'][subScriptTitle] == null)
+            return null;
+        return converter.convertSubScript(script['subScripts'][subScriptTitle]);
+    }
+    
     const handleChainContractOk = () => {
         chainContractForm.validateFields()
             .then(values => {
-                const newChainContractConfig = {
-                    title: values.title,
-                    chainId: values.chain,
-                    to: values.contractAddr
-                }
-                var from = null;
-                if (values['from'] != null) {
-                    if (values['from'].valueType == 'constant') 
-                        from = values['from'].address;
-                    else {
-                        from = {};
-                        from.step = values['from'].step; 
-                        if (script[from.step].element.type == 'pendingTx' || script[from.step].element.type == 'executedTx') {
-                            try {
-                                const obj = JSON.prarse(from.address);
-                                from.referenceType = obj.referenceType == 'from' ? 1 : 2;   // 1: ValueType.from  2: ValueType.to
-                            } catch (error) {
-                                from.referenceType = 5;  // ValueType.parameter
-                            }
-                        }
-                        from.address = values['from'].address;
-                    }
-                    newChainContractConfig.from = from;
-                }
-                setChainContractConfig(newChainContractConfig);
-                console.log(newChainContractConfig);
+                console.log(values);
+                setChainContractConfig(values);
                 setConfigChainContractVisible(false);
                 if (currentScriptType == 'event') {
                     setAddEventMonitorVisible(true);
-                } else if (currentScriptType == 'pendingTx' || currentScriptType == 'executedTx') {
-                    setAddPendingTxMonitorVisible(true);
-                } else if (currentScriptType == 'rFunc') {
-                    setSelectFunctionInContractVisible(true);
-                } else if (currentScriptType == 'wFunc') {
-                    setSelectFunctionInContractVisible(true);
-                }
-
-                var subScripts = localStorage.getItem('subScripts');
-                if (subScripts != null) {
-                    subScripts = JSON.parse(subScripts);
-                    if (subScripts[values.title] == null) {
-                        subScripts[values.title] = {}
+                    if (modifyScript) {
+                        const initValues = JSON.parse(JSON.stringify(initialValuesOfEvent));
+                        setInitialValuesOfEvent(initValues);
                     }
-                } else {
-                    subScripts = {}
-                    subScripts[values.title] = {}
+                } else if (currentScriptType == 'pendingTx' || currentScriptType == 'executedTx') {
+                    setAddTxMonitorVisible(true);
+                    if (modifyScript) {
+                        const initValues = JSON.parse(JSON.stringify(initialValuesOfTxMonitor));
+                        setInitialValuesOfEvent(initValues);
+                    }
+                } else if (currentScriptType == 'rFunc' || currentScriptType == 'wFunc') {
+                    setSelectFunctionInContractVisible(true);
+                    if (modifyScript) {
+                        const initValues = JSON.parse(JSON.stringify(initialValuesOfFunctionSelected));
+                        setInitialValuesOfEvent(initValues);
+                    }
                 }
-                subScripts[values.title]['type'] = currentScriptType;
-                subScripts[values.title]['chainContractConfig'] = values;
-                localStorage.setItem('subScripts', JSON.stringify(subScripts));
             })
             .catch(info => {
                 console.log('Validate Failed:', info);
@@ -225,19 +250,8 @@ export default function AddScript() {
         eventMonitorForm.validateFields()
             .then(values => {
                 console.log(values);
-                const eventElement = JSON.parse(values.event);
-                const eventSig = web3.eth.abi.encodeEventSignature(eventElement);
-                //const eventInfo = values.event.split(',');
-                //const key = currentChain + '_' + contractAddr + '_' + eventInfo[1] + '_' + new Date().getTime();
-                const event = {
-                    type: currentScriptType, 
-                    name: eventElement.name, 
-                    signature: eventSig,
-                    element: eventElement,
-                    filter: values.filter,
-                    result: []
-                }
-                updateScript(chainContractConfig, event);
+                setEventConfig(values);
+                updateScript(values);
                 setAddEventMonitorVisible(false);
                 eventMonitorForm.resetFields();
                 chainContractForm.resetFields();
@@ -247,31 +261,15 @@ export default function AddScript() {
             });
     }
 
-    const handlePendingTxMonitorOk = () => {
-        //
+    const handleTxMonitorOk = () => {
         pendingTxMonitorForm.validateFields()
             .then(values => {
-                const functionElement = JSON.parse(values.function);
-                const functionSig = web3.eth.abi.encodeFunctionSignature(functionElement);
-                const functionMonitored = {
-                    type: currentScriptType,
-                    name: functionElement.name,
-                    signature: functionSig,
-                    element: functionElement,
-                    parameterCondition: {}
-                }
-                if (values.msgValue != null && values.msgValue.op != null && values.msgValue.value != null) {
-                    functionMonitored.valueCondition = values.msgValue;
-                }
-                functionElement.inputs.map(input => {
-                    if (values[input.name].op != null && values[input.name].value != null) {
-                        functionMonitored.parameterCondition[input.name] = values[input.name];
-                    }
-                })
-                updateScript(chainContractConfig, functionMonitored);
+                console.log('tx monitored data', values);
+                setTxMonitorConfig(values);
+                updateScript(values);
                 pendingTxMonitorForm.resetFields();
                 chainContractForm.resetFields();
-                setAddPendingTxMonitorVisible(false);
+                setAddTxMonitorVisible(false);
             })
             .catch(info => {
                 console.log('Validate Failed:', info);
@@ -281,51 +279,43 @@ export default function AddScript() {
     const handleSelectFunctionOk = () => {
         functionSelectedForm.validateFields()
             .then(values => {
-                console.log('read data', values);
+                console.log('function data', values);
                 
-                const functionElement = JSON.parse(values.function);
-                const functionSig = web3.eth.abi.encodeFunctionSignature(functionElement);
-                const functionSelected = {
-                    type: currentScriptType,
-                    name: functionElement.name,
-                    signature: functionSig,
-                    element: functionElement,
-                    parameters: []
-                }
-                functionElement.inputs.map((input, index) => {
-                    const inputName = utils.isEmptyObj(input.name) ? 'parameter #' + index : input.name;
-                    if (values[inputName].valueType == 'constant') {
-                        functionSelected.parameters.push({paraName: inputName, value: values[inputName].value});
-                    } else {
-                        functionSelected.parameters.push({step: values[inputName].step,
-                                                           referenceParaName: input.name, 
-                                                           referenceParaIndex: index,
-                                                           op: values[inputName].op,
-                                                           externalValue: values[inputName].externalValue});
-                    }
-                });
-                setFunctionSelectedConfig(functionSelected);
+                setFunctionSelectedConfig(values);
                 setSelectFunctionInContractVisible(false); 
                 setDependencyConfigVisible(true);
+
+                if (modifyScript) {
+                    const initValues = JSON.parse(JSON.stringify(initialValuesOfDependency));
+                    setInitialValuesOfEvent(initValues);
+                }
             })
     }
 
     const handleDependencyConfigOK = () => {        
         dependencyConfigForm.validateFields().then(values => {
-            console.log(values);
+            console.log('dependency data', values);
+            setDependencyConfig(values);
             if (currentScriptType == 'wFunc') {
                 setDependencyConfigVisible(false); 
                 setLeftConfigVisible(true);
+                if (modifyScript) {
+                    const initValues = JSON.parse(JSON.stringify(initialValuesOfLeftConfig));
+                    setInitialValuesOfEvent(initValues);
+                }
             } else {
                 setDependencyConfigVisible(false); 
             }
         });
     }
 
-    const handleSendTxOk = () => {
+    const handleLeftConfigOk = () => {
         leftConfigForm.validateFields()
             .then(values => {
-                console.log(values);
+                console.log('left config data', values);
+                setLeftConfig(values);
+                updateScript(values);
+                setLeftConfigVisible(false);                
             });
     }
 
@@ -418,7 +408,7 @@ export default function AddScript() {
     const checkTitle = (_, value) => {
         if (isInternalDependency(value))
             return Promise.reject(new Error('Title can NOT use keywords: timer, blockNumber, gasPrice, customScript.'));
-        else if (script[value] == null || (modifyScript && value == curModifiedTitle))
+        else if (getSubScript(value) == null || (modifyScript && value == curModifiedTitle))
             return Promise.resolve();
         else 
             return Promise.reject(new Error('Title can NOT be duplicated.'));
@@ -433,6 +423,7 @@ export default function AddScript() {
 
     const addScript = (scriptType, modalTitle, stepNumber) => {
         setModifyScript(false);
+        clearInitialValues();
         openStepEditor(scriptType, modalTitle, stepNumber);
     }
 
@@ -457,34 +448,41 @@ export default function AddScript() {
         }
     }
 
-    const deleteStep = (stepTitle) => {
-        delete script[stepTitle];
+    const deleteSubScript = (subScriptTitle) => {
+        delete script['subScripts'][subScriptTitle];
         const tmpScript = JSON.parse(JSON.stringify(script));
         setScript(tmpScript);
     }
 
     const modifyStep = (subScriptTitle) => {
-        var subScripts = localStorage.getItem('subScripts');
+        var subScripts = script.subScripts;
         if (subScripts != null) {
             setModifyScript(true);
             setCurModifiedTitle(subScriptTitle);
-            subScripts = JSON.parse(subScripts);
             const subScript = subScripts[subScriptTitle];
             const stepType = subScript.type;
+            setInitialValuesOfChainContract(subScript['chainContractConfig']);
             if (stepType == 'event') {
-                setInitialValuesOfOne(subScript['chainContractConfig']);
+                setInitialValuesOfEvent(subScript['eventConfig']);
                 openStepEditor('event', 'Event Config', 2);
             }
             if (stepType == 'pendingTx') {
+                setInitialValuesOfTxMonitor(subScript['txMonitorConfig']);
                 openStepEditor('pendingTx', 'Transaction Config(in mempool)', 2);
             }
             if (stepType == 'executedTx') {
+                setInitialValuesOfTxMonitor(subScript['txMonitorConfig']);
                 openStepEditor('executedTx', 'Transaction Config(in latest block)', 2);
             }
             if (stepType == 'rFunc') {
+                setInitialValuesOfFunctionSelected(subScript['functionSelectedConfig']);
+                setInitialValuesOfDependency(subScript['dependencyConfig']);
                 openStepEditor('rFunc', 'Read Contract Data Config', 3);
             }
             if (stepType == 'wFunc') {
+                setInitialValuesOfFunctionSelected(subScript['functionSelectedConfig']);
+                setInitialValuesOfDependency(subScript['dependencyConfig']);
+                setInitialValuesOfLeftConfig(subScript['leftConfig']);
                 openStepEditor('wFunc', 'Send Transaction Config', 4);
             }
             if (stepType == 'clearResult') {
@@ -506,7 +504,7 @@ export default function AddScript() {
     }
 
     const formItemInFunctionSelectedModal = (input, index) => {
-        var inputName = utils.isEmptyObj(input.name) ? 'parameter #' + index : input.name;
+        var inputName = utils.isEmptyObj(input.name) ? '#' + index : input.name;
         var valueType = functionSelectedForm.getFieldValue([inputName, 'valueType']);
         if (utils.isEmptyObj(valueType)) valueType = 'constant';
         //console.log(inputName, valueType);
@@ -535,7 +533,7 @@ export default function AddScript() {
                             <Form.Item name={[inputName, 'step']}>
                                 <Select placeholder="Select subScript" style={{width: 270, textAlign: 'center'}}>
                                 {
-                                    Object.entries(script).map(entry => 
+                                    Object.entries(getSubScripts()).map(entry => 
                                         <Option title={entry[0]} value={entry[0]}>{entry[0]}</Option>
                                     )
                                 }
@@ -556,16 +554,18 @@ export default function AddScript() {
                                     {
                                         getFieldValue([inputName, 'step']) == null ? 
                                         null :
-                                        isInputStep(script[getFieldValue([inputName, 'step'])]) ?                                        
-                                            script[getFieldValue([inputName, 'step'])].element.inputs.map(copyInput => {
+                                        isInputStep(getSubScript(getFieldValue([inputName, 'step']))) ?                                        
+                                            getSubScript(getFieldValue([inputName, 'step'])).element.inputs.map((copyInput, index) => {
+                                                const paraName = utils.isEmptyObj(copyInput.name) ? '#' + index : copyInput.name;
                                                 if (isSameOrSimiliarType(input.type, copyInput.type))
-                                                    return <Option value={copyInput.name}>value of input parameter '{copyInput.name}' in {script[getFieldValue([inputName, 'step'])].element.name}</Option>;
+                                                    return <Option value={paraName}>value of input parameter '{paraName}' in {getSubScript(getFieldValue([inputName, 'step'])).element.name}</Option>;
                                                 }
                                             ) 
                                             :
-                                            script[getFieldValue([inputName, 'step'])].element.outputs.map(copyOutput => {
+                                            getSubScript(getFieldValue([inputName, 'step'])).element.outputs.map((copyOutput, index) => {
+                                                const paraName = utils.isEmptyObj(copyOutput.name) ? '#' + index : copyOutput.name;
                                                 if (isSameOrSimiliarType(input.type, copyOutput.type))
-                                                    return <Option value={copyOutput.name}>value of output parameter '{copyOutput.name}' in {script[getFieldValue([inputName, 'step'])].element.name}</Option>;
+                                                    return <Option value={paraName}>value of output parameter '{paraName}' in {getSubScript(getFieldValue([inputName, 'step'])).element.name}</Option>;
                                                 }
                                             )
                                     }
@@ -666,40 +666,41 @@ export default function AddScript() {
                     <p/>
                     <Space wrap>
                         {
-                            Object.entries(script).map(entry => {
-                                const step = entry[1];
-                                if (step.type != 'event' && step.type != 'pendingTx' && step.type != 'executedTx') return;
+                            Object.entries(getSubScripts()).map(entry => {
+                                const subScript = converter.convertSubScript(entry[1]);
+                                if (subScript.type != 'event' && subScript.type != 'pendingTx' && subScript.type != 'executedTx') return;
                                 const externalInfo = [];
                                 var interfaceType = '';
-                                if (step.type == 'event') {
+                                if (subScript.type == 'event') {
                                     interfaceType = 'event';
-                                    if (!utils.isEmptyObj(step.filter))
-                                        externalInfo.push(<p><Text strong>filter:</Text> <Text code>{step.filter}</Text></p>);
-                                } else if (step.type == 'pendingTx' || step.type == 'executedTx') {
+                                    if (!utils.isEmptyObj(subScript.filter))
+                                        externalInfo.push(<p><Text strong>filter:</Text> <Text code>{subScript.filter}</Text></p>);
+                                } else if (subScript.type == 'pendingTx' || subScript.type == 'executedTx') {
                                     interfaceType = 'function';
-                                    if (step.valueCondition != null) {
-                                        externalInfo.push(<p><Text strong>msg.value:</Text> <Text code>{step.valueCondition.op} {step.valueCondition.value} ETH</Text></p>);
+                                    if (subScript.valueCondition != null) {
+                                        externalInfo.push(<p><Text strong>msg.value:</Text> <Text code>{subScript.valueCondition.op} {subScript.valueCondition.value} ETH</Text></p>);
                                     }
                                     var paraCondition = '';
-                                    for (const [parameter, condition] of Object.entries(step.parameterCondition)) {
+                                    for (const [parameter, condition] of Object.entries(subScript.parameterCondition)) {
                                         paraCondition += parameter + ' ' + condition.op + ' ' + condition.value + ' && ';
                                     }
+                                        
                                     if (paraCondition.length > 0) {
                                         externalInfo.push(<p><Text strong>parameter condition:</Text><Text code>{paraCondition.substr(0, paraCondition.length - ' && '.length)}</Text></p>);
                                     }
                                 }
-                                return <Card title={step.title} style={{ width: 400 }}>
-                                    <p><Text strong>Action:</Text> <Text keyboard>{getReadableType(step.type)}</Text></p>
-                                    <p><Text strong>Chain:</Text> <Text keyboard>{evmChainIds[step.chainId]}(chainId = {step.chainId})</Text></p>
-                                    <p><Text strong>Contract:</Text> <Text code>{step.to}</Text></p>
-                                    <p><Text strong>{interfaceType}:</Text> <Text code>{step.name}</Text></p>
+                                return <Card title={subScript.title} style={{ width: 400 }}>
+                                    <p><Text strong>Action:</Text> <Text keyboard>{getReadableType(subScript.type)}</Text></p>
+                                    <p><Text strong>Chain:</Text> <Text keyboard>{evmChainIds[subScript.chainId]}(chainId = {subScript.chainId})</Text></p>
+                                    <p><Text strong>Contract:</Text> <Text code>{subScript.to}</Text></p>
+                                    <p><Text strong>{interfaceType}:</Text> <Text code>{subScript.name}</Text></p>
                                     {
                                         externalInfo
                                     }
                                     <Divider plain>
                                         <Space size='large'>
-                                            <Button type='primary' onClick={() => deleteStep(step.title)}>Delete</Button>
-                                            <Button type='primary' onClick={() => modifyStep(step.title)}>Modify</Button>
+                                            <Button type='primary' onClick={() => deleteSubScript(subScript.title)}>Delete</Button>
+                                            <Button type='primary' onClick={() => modifyStep(subScript.title)}>Modify</Button>
                                         </Space>
                                     </Divider>
                                 </Card>
@@ -713,6 +714,52 @@ export default function AddScript() {
                         <Button type='primary' onClick={() => addScript('rFunc', 'Read Contract Data Config', 3)}>Read contract</Button>
                         <Button type='primary' onClick={() => addScript('rCex', 'Read CEX Config')}>Read CEX</Button>
                         <Button type='primary' onClick={() => addScript('rCex', 'Read Web2 Data')}>Read Web2 Data</Button>
+                    </Space><p/>
+                    <Space wrap>
+                        {
+                            Object.entries(getSubScripts()).map(entry => {
+                                const subScript = converter.convertSubScript(entry[1]);
+                                if (subScript.type != 'rFunc' && subScript.type != 'rCex' && subScript.type != 'web2') return;
+                                const externalInfo = [];
+                                var interfaceType = '';
+                                if (subScript.type == 'rFunc') {
+                                    interfaceType = 'function';
+                                    
+                                    if (subScript.valueCondition != null) {
+                                        externalInfo.push(<p><Text strong>msg.value:</Text> <Text code>{subScript.valueCondition.op} {subScript.valueCondition.value} ETH</Text></p>);
+                                    }
+                                    var paraCondition = '';
+                                    for (const [parameter, condition] of Object.entries(subScript.parameterCondition)) {
+                                        paraCondition += parameter + ' ' + condition.op + ' ' + condition.value + ' && ';
+                                    }
+                                        
+                                    if (paraCondition.length > 0) {
+                                        externalInfo.push(<p><Text strong>parameter condition:</Text><Text code>{paraCondition.substr(0, paraCondition.length - ' && '.length)}</Text></p>);
+                                    }
+                                } else if (subScript.type == 'rCex') {
+                                    interfaceType = 'coin';
+                                } else if (subScript.type == 'web2') {
+
+                                }
+                                return <Card title={subScript.title} style={{ width: 400 }}>
+                                    <p><Text strong>Action:</Text> <Text keyboard>{getReadableType(subScript.type)}</Text></p>
+                                    <p><Text strong>Chain:</Text> <Text keyboard>{evmChainIds[subScript.chainId]}(chainId = {subScript.chainId})</Text></p>
+                                    <p><Text strong>Contract:</Text> <Text code>{subScript.to}</Text></p>
+                                    <p><Text strong>From Address:</Text> <Text code>{subScript.to}</Text></p>
+                                    <p><Text strong>{interfaceType}:</Text> <Text code>{subScript.name}</Text></p>
+                                    {
+                                        externalInfo
+                                    }
+                                    <Divider plain>
+                                        <Space size='large'>
+                                            <Button type='primary' onClick={() => deleteSubScript(subScript.title)}>Delete</Button>
+                                            <Button type='primary' onClick={() => modifyStep(subScript.title)}>Modify</Button>
+                                        </Space>
+                                    </Divider>
+                                </Card>
+                                }
+                            )
+                        }
                     </Space>
                 </Panel>
                 <Panel header={'Send transaction'}>
@@ -752,7 +799,7 @@ export default function AddScript() {
                     form={chainContractForm}
                     layout="vertical"
                     name="form_in_modal"
-                    initialValues={initialValuesOfOne}
+                    initialValues={initialValuesOfChainContract}
                 >      
                     <Form.Item 
                         name="title" 
@@ -803,7 +850,7 @@ export default function AddScript() {
                                             >
                                                 <Select placeholder="Select subScript" style={{width: 270, textAlign: 'center'}}>
                                                     {
-                                                        Object.entries(script).map(entry => 
+                                                        Object.entries(getSubScripts()).map(entry => 
                                                             <Option title={entry[0]} value={entry[0]}>{entry[0]}</Option>
                                                         )
                                                     }
@@ -832,7 +879,7 @@ export default function AddScript() {
                                                 
                                             </Form.Item>
                                             :
-                                            script[fromStep] != null ?
+                                            getSubScript(fromStep) != null ?
                                                 <Form.Item
                                                     name={['from', 'address']}
                                                     noStyle
@@ -840,21 +887,21 @@ export default function AddScript() {
                                                 >
                                                     <Select placeholder="Select address source" style={{width: 470, textAlign: 'center'}}>
                                                         {
-                                                            (script[fromStep].element.type == 'event' || !script[fromStep].element.constant) ?  // 事件和write交易需要从inputs里读取数据，而view接口从outputs里读数据
-                                                            script[fromStep].element.inputs.map(input => {
+                                                            (getSubScript(fromStep).element.type == 'event' || !getSubScript(fromStep).element.constant) ?  // 事件和write交易需要从inputs里读取数据，而view接口从outputs里读数据
+                                                            getSubScript(fromStep).element.inputs.map(input => {
                                                                 if (input.type == 'address') {
-                                                                    return <Option value={input.name}>value of input parameter '{input.name}' in {script[fromStep].element.name}</Option>;
+                                                                    return <Option value={input.name}>value of input parameter '{input.name}' in {getSubScript(fromStep).element.name}</Option>;
                                                                 }
                                                             })
                                                             :
-                                                            script[fromStep].element.outputs.map(output => {
+                                                            getSubScript(fromStep).element.outputs.map(output => {
                                                                 if (output.type == 'address') {
-                                                                    return <Option value={output.name}>value of output parameter '{output.name}' in {script[fromStep].element.name}</Option>;
+                                                                    return <Option value={output.name}>value of output parameter '{output.name}' in {getSubScript(fromStep).element.name}</Option>;
                                                                 }
                                                             })
                                                         }
                                                         {
-                                                            script[fromStep].type == 'pendingTx' || script[fromStep].type == 'executedTx' ? 
+                                                            getSubScript(fromStep).type == 'pendingTx' || getSubScript(fromStep).type == 'executedTx' ? 
                                                             [
                                                                 <Option value={JSON.stringify({referenceType: 'from'})}>value of 'from' in transaction</Option>,
                                                                 <Option value={JSON.stringify({referenceType: 'to'})}>value of 'to' in transaction</Option>
@@ -922,6 +969,7 @@ export default function AddScript() {
                     form={eventMonitorForm}
                     layout="vertical"
                     name="form_in_modal"
+                    initialValues={initialValuesOfEvent}
                 >   
                     <Form.Item
                         name="event"
@@ -939,7 +987,7 @@ export default function AddScript() {
                                             })
                                             if (parameters.length > 0) parameters = parameters.substr(0, parameters.length - 2);
                                             
-                                            return <Option key={JSON.stringify(element)}>{element.name}({parameters})</Option>
+                                            return <Option key={JSON.stringify(element)} value={JSON.stringify(element)}>{element.name}({parameters})</Option>
                                         }
                                     }) : null
                             }
@@ -963,17 +1011,17 @@ export default function AddScript() {
             </Modal>
 
             <Modal
-                visible={addPendingTxMonitorVisible}
+                visible={addTxMonitorVisible}
                 title={modalTitle + ' 2/' + totalStep}
                 okText="Confirm"
                 cancelText="Previous"
-                onCancel={() => setAddPendingTxMonitorVisible(false)}
-                onOk={handlePendingTxMonitorOk}
+                onCancel={() => setAddTxMonitorVisible(false)}
+                onOk={handleTxMonitorOk}
                 footer={[
-                    <Button key="back" onClick={() => {setAddPendingTxMonitorVisible(false); setConfigChainContractVisible(true)}}>
+                    <Button key="back" onClick={() => {setAddTxMonitorVisible(false); setConfigChainContractVisible(true)}}>
                       Previous
                     </Button>,
-                    <Button key="submit" type="primary" onClick={handlePendingTxMonitorOk}>
+                    <Button key="submit" type="primary" onClick={handleTxMonitorOk}>
                       Confirm
                     </Button>
                   ]}
@@ -982,6 +1030,7 @@ export default function AddScript() {
                     form={pendingTxMonitorForm}
                     layout="vertical"
                     name="form_in_modal"
+                    initialValues={initialValuesOfTxMonitor}
                 >   
                     <Form.Item
                         name="function"
@@ -999,7 +1048,7 @@ export default function AddScript() {
                                             })
                                             if (parameters.length > 0) parameters = parameters.substr(0, parameters.length - 2);
                                             
-                                            return <Option title={element.name + '(' + parameters + ')'} key={JSON.stringify(element)}>{element.name}({parameters})</Option>
+                                            return <Option title={element.name + '(' + parameters + ')'} key={JSON.stringify(element)} value={JSON.stringify(element)}>{element.name}({parameters})</Option>
                                         }
                                     }) : null
                             }
@@ -1098,6 +1147,7 @@ export default function AddScript() {
                     form={functionSelectedForm}
                     layout="vertical"
                     name="form_in_modal"
+                    initialValues={initialValuesOfFunctionSelected}
                 >   
                     <Form.Item
                         name="function"
@@ -1146,6 +1196,7 @@ export default function AddScript() {
                     form={dependencyConfigForm}
                     layout="vertical"
                     name="form_in_modal"
+                    initialValues={initialValuesOfDependency}
                 >   
                     <Form.List name="dependency">
                         {(fields, { add, remove }) => (
@@ -1175,7 +1226,7 @@ export default function AddScript() {
                                     >
                                         <Select placeholder="Select the dependency object" style={{width: 470, textAlign: 'center'}}>
                                             {
-                                                Object.entries(script).map(entry => 
+                                                Object.entries(getSubScripts()).map(entry => 
                                                     <Option title={entry[0]} value={entry[0]}>{entry[0]}</Option>
                                                 )
                                             }
@@ -1202,22 +1253,24 @@ export default function AddScript() {
                                             >
                                             {
                                                 stepName == null || isInternalDependency(stepName)
-                                                || (script[stepName] != null && script[stepName].element.type == 'wFunc') ? 
+                                                || (getSubScript(stepName) != null && getSubScript(stepName).element.type == 'wFunc') ? 
                                                 <div style={{display: 'none'}} /> 
                                                 :
                                                 <Select placeholder="Select input source" style={{width: 470, textAlign: 'center'}}>
                                                     {
-                                                        (script[stepName].element.type == 'event' 
-                                                        || !script[stepName].element.constant) ?  // 事件和write交易需要从inputs里读取数据，而view接口从outputs里读数据
-                                                        script[stepName].element.inputs.map(input => {
+                                                        (getSubScript(stepName).element.type == 'event' 
+                                                        || !getSubScript(stepName).element.constant) ?  // 事件和write交易需要从inputs里读取数据，而view接口从outputs里读数据
+                                                        getSubScript(stepName).element.inputs.map((input, index) => {
                                                             if (input.type == 'address') {
-                                                                return <Option value={input.name}>value of input parameter '{input.name}' in {script[stepName].element.name}</Option>;
+                                                                const paraName = utils.isEmptyObj(input.name) ? '#' + index : input.name;
+                                                                return <Option value={paraName}>value of input parameter '{paraName}' in {getSubScript(stepName).element.name}</Option>;
                                                             }
                                                         })
                                                         :
-                                                        script[stepName].element.outputs.map(output => {
+                                                        getSubScript(stepName).element.outputs.map((output, index) => {
                                                             if (output.type == 'address') {
-                                                                return <Option value={output.name}>value of output parameter '{output.name}' in {script[stepName].element.name}</Option>;
+                                                                const paraName = utils.isEmptyObj(output.name) ? '#' + index : output.name;
+                                                                return <Option value={paraName}>value of output parameter '{paraName}' in {getSubScript(stepName).element.name}</Option>;
                                                             }
                                                         })
                                                     }
@@ -1242,7 +1295,7 @@ export default function AddScript() {
                                                 dependencyConfigForm.setFieldValue(['dependency', name, 'compareValue'], moment(time));
                                             }
                                             return stepName == null 
-                                            || (script[stepName] != null && script[stepName].element.type == 'wFunc') ? 
+                                            || (getSubScript(stepName) != null && getSubScript(stepName).element.type == 'wFunc') ? 
                                                 <div style={{display: 'none'}}/> :
                                                 (
                                                     <div style={{marginTop: -60}}>
@@ -1341,12 +1394,12 @@ export default function AddScript() {
                 okText="Confirm"
                 cancelText="Previous"
                 onCancel={() => setLeftConfigVisible(false)}
-                onOk={handleSendTxOk}
+                onOk={handleLeftConfigOk}
                 footer={[
                     <Button key="back" onClick={() => {setLeftConfigVisible(false); setDependencyConfigVisible(true); }}>
                       Previous
                     </Button>,
-                    <Button key="submit" type="primary" onClick={handleSendTxOk}>
+                    <Button key="submit" type="primary" onClick={handleLeftConfigOk}>
                       Confirm
                     </Button>
                   ]}
@@ -1355,6 +1408,7 @@ export default function AddScript() {
                         form={leftConfigForm}
                         layout="vertical"
                         name="form_in_modal"
+                        initialValues={initialValuesOfLeftConfig}
                     >
                         <Form.Item 
                             label="gas price"

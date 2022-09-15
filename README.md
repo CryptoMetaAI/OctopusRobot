@@ -1,5 +1,5 @@
 # What
-Octopus Robot dAPP is a totally decentralized application which can help you connect different blockchain or web2. 
+Octopus Robot dAPP is a totally decentralized application which can help you connect different blockchains or Web2 service. 
 
 
 # How
