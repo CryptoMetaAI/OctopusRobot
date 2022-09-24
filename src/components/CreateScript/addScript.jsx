@@ -166,7 +166,7 @@ export default function AddScript() {
                     script.title =  curScriptTitle;
                 } else {
                     var randomTitle = Math.floor(100000 * (Math.random() + 1));
-                    while(scripts[randomTitle] != null) randomTitle = 'title-' + Math.floor(100000 * (Math.random() + 1));
+                    while(scripts[randomTitle] != null) randomTitle = 'script-' + Math.floor(100000 * (Math.random() + 1));
                     script.title =  randomTitle;
                 }
             }
