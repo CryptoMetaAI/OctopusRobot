@@ -1,6 +1,7 @@
 
 import Web3 from 'web3';
 import * as utils from '../../utils/utils';
+import moment from "moment";
 
 export default class Converter {
     constructor(script) {
@@ -106,21 +107,22 @@ export default class Converter {
             delayedTime: dependencyInfo.delayedTime,
             conditions: []
         }
-        dependencyInfo.dependency.map(dependency => {
+        dependencyInfo.dependency?.map(dependency => {
             var paraName = dependency.parameter;
             var paraIndex = -1; 
-            if (paraName.indexOf('#') == 0) {
+            if (paraName?.indexOf('#') == 0) {
                 paraIndex = paraName.substr(1); 
             }
             const condition = {
                 step: dependency.step,
                 paraName,
                 paraIndex,
+                tokenSymbol: dependency.tokenSymbol,
                 compareType: dependency.compareType,
                 compareValue: dependency.compareValue
             }
             if (dependency.step == 'timer') {
-                condition.compareValue = condition.compareValue.unix();  // s
+                //condition.compareValue = moment(condition.compareValue).unix();  // s
             }
             dependencies.conditions.push(condition);
         });
@@ -130,7 +132,8 @@ export default class Converter {
     convertLeftConfig(leftConfigInfo) {
         const leftConfig = {
             value: leftConfigInfo.value,
-            gasPriceType: leftConfigInfo.gasPrice.valueType,
+            gasPriceValueType: leftConfigInfo.gasPrice.valueType,
+            gasPriceType: leftConfigInfo.gasPrice.gasPriceType,
             maxFeePerGas: leftConfigInfo.gasPrice.maxFeePerGas,
             repeaTimes: leftConfigInfo.repeaTimes,
             repeatCondition: leftConfigInfo.repeatCondition
@@ -165,6 +168,21 @@ export default class Converter {
         return {...txBaseInfo, ...functionSelectedInfo, ...dependencyInfo, ...leftConfigInfo}
     }
 
+    convertTgMsgConfig(tgMsgConfig) {
+        const tgMsg = {
+            title: tgMsgConfig.title,
+            toUserId: tgMsgConfig.toUserId,
+            message: tgMsgConfig.message
+        }
+        return tgMsg;
+    }
+
+    convertTgMsg(subScript) {
+        const tgMsg = this.convertTgMsgConfig(subScript.tgMsgConfig);
+        const dependencyInfo = this.convertDependency(subScript.dependencyConfig);
+        return {...tgMsg, ...dependencyInfo}
+    }
+
     convertSubScript(subScript) {
         var result;
         const currentScriptType = subScript.type;
@@ -176,6 +194,8 @@ export default class Converter {
             result = this.convertRFunc(subScript);
         } else if (currentScriptType == 'wFunc') {
             result = this.convertWFunc(subScript);
+        } else if (currentScriptType == 'tgMsg') {
+            result = this.convertTgMsg(subScript);
         }
         result.type = subScript.type;
         return result;

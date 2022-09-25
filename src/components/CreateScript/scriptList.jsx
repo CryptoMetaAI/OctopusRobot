@@ -1,33 +1,32 @@
 import React, { useState } from 'react';
-import { List, Modal, Form, Button, Input } from 'antd';
+import { List, Modal, Form, Button, Input, Space } from 'antd';
 import { Link } from "react-router-dom";
 import { ethers } from 'ethers';
 // import * as ethUtil from 'ethereumjs-util';
 import { AvaxLogo, PolygonLogo, BSCLogo, ETHLogo } from "./Logos";
 
 export default function ScriptList() {
-    var localAccountList = global.localStorage.getItem('scriptList');
-    if (localAccountList == null) {
-        localAccountList = []
-    }
-    var scripts = global.localStorage.getItem('scripts');
+    var scripts = global.localStorage.getItem('scriptList');
     if (scripts == null) {
         scripts = {}
     } else {
         scripts = JSON.parse(scripts);
     }
     var tmpList = Object.entries(scripts).map(entry => entry[1]);
-    console.log(tmpList);
     tmpList = tmpList.sort((a, b) => b.createdTime - a.createdTime)
+
     const [scriptList, setScriptList] = useState(tmpList);
-    console.log(scriptList);
     const [addScriptVisible, setAddScriptVisible] = useState(false);
     const [keyLoading, setKeyLoading] = useState(false);
     const [exportKeyVisible, setExportKeyVisible] = useState(false);
     const [exportedAddress, setExportedAddress] = useState('');
+    const [newScriptTitleVisible, setNewScriptTitleVisible] = useState(false);
+    const [isRunning, setIsRunning] = useState({});
 
     const [importForm] = Form.useForm();
     const [exportForm] = Form.useForm();
+
+    var curScriptTitle;
 
     const logoMap = {1: <ETHLogo />, 43113: <AvaxLogo />, 137: <PolygonLogo />, 56: <BSCLogo />}
 
@@ -44,6 +43,19 @@ export default function ScriptList() {
 
     const modifyScript = (title) => {        
         global.localStorage.setItem('tmpScript', JSON.stringify(scripts[title])); 
+    }
+
+    const runScript = (title) => {    
+        isRunning[title] = true;    
+        setIsRunning(JSON.parse(JSON.stringify(isRunning)));
+    }
+
+    const stopScript = (title) => {        
+        isRunning[title] = false;    
+        setIsRunning(JSON.parse(JSON.stringify(isRunning)));
+    }
+
+    const showScriptRunningLog = (title) => {        
     }
 
     const exportPrivateKey = (address) => {
@@ -172,11 +184,15 @@ export default function ScriptList() {
         return Promise.reject(new Error('Alias has been exist!'));
     }
 
+    const setScriptTitleOK = () => {
+
+    }
+
     return (
         <div>
             <List
             header={<div>Your Scripts</div>}
-            footer={<Link type="primary" to="/CreateScript/addScript"><Button type='primary'>Add Script</Button></Link>}
+            footer={<Link type="primary" to="/CreateScript/addScript"><Button type='primary' >Add Script</Button></Link>}//{}
             bordered
             dataSource={scriptList}
             renderItem={item => (
@@ -186,11 +202,20 @@ export default function ScriptList() {
                         title={item.title}
                         description={<div>created time: {new Date(item.createdTime).toLocaleString()}</div>}
                         />
-                    <div>
+                    <Space>
                         <Button type="primary" onClick={() => deleteScript(item.title)}>Delete</Button>
-                        <p/>
                         <Link type="primary" to="/CreateScript/modifyScript"><Button type="primary" onClick={() => modifyScript(item.title)}>Modify</Button></Link>
-                    </div>
+                        
+                        {!isRunning[item.title] ? 
+                        <Button type="primary" onClick={() => runScript(item.title)}>Run</Button>
+                        :null}
+                        {isRunning[item.title] ? 
+                        <Button type="primary" onClick={() => stopScript(item.title)}>Stop Run</Button>
+                        :null}
+                        {isRunning[item.title] ? 
+                        <Button type="primary" onClick={() => showScriptRunningLog(item.title)}>Show Running Log</Button>
+                        :null}
+                    </Space>
                 </List.Item>
             )}
             />
@@ -267,6 +292,25 @@ export default function ScriptList() {
                         </Form.Item>
                     </Form>
                 </Modal>
+
+            <Modal
+                visible={newScriptTitleVisible}
+                title={"Set Script's Title"}
+                okText="Confirm"
+                cancelText="Cancel"
+                onCancel={() => setNewScriptTitleVisible(false)}
+                onOk={setScriptTitleOK}
+                footer={[
+                    <Button key="back" onClick={() => setNewScriptTitleVisible(false)}>
+                      Cancel
+                    </Button>,
+                    <Button key="submit" type="primary" onClick={setScriptTitleOK}>
+                      Confirm
+                    </Button>
+                  ]}
+                >
+                <Input defaultValue='' allowClear onChange={e => curScriptTitle = e.target.value}/>    
+            </Modal> 
         </div>
         ); 
 }

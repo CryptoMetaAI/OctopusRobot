@@ -5,8 +5,11 @@ import { ethers } from 'ethers';
 import { Link } from "react-router-dom";
 import moment from "moment";
 import Web3 from 'web3';
+import {SortableContainer, SortableElement} from 'react-sortable-hoc';
+import {arrayMoveImmutable} from 'array-move';
 import * as utils from '../../utils/utils';
 import Converter from './Converter';
+import BinanceSymbols from './asset/BinanceAssetList.json';
 
 import { AvaxLogo, PolygonLogo, BSCLogo, ETHLogo } from "./Logos";
 import assert from 'assert';
@@ -76,7 +79,7 @@ export default function AddScript() {
     } else {
         tmpScript = JSON.parse(tmpScript);
     }
-    var scripts = global.localStorage.getItem('scripts');
+    var scripts = global.localStorage.getItem('scriptList');
     if (scripts == null) {
         scripts = {}
     } else {
@@ -97,16 +100,18 @@ export default function AddScript() {
     const [functionSelectedConfig, setFunctionSelectedConfig] = useState({});
     const [dependencyConfig, setDependencyConfig] = useState({});
     const [leftConfig, setLeftConfig] = useState({});
+    const [tgMsgConfig, setTgMsgConfig] = useState({});
     const [modalTitle, setModalTitle] = useState('');
     const [currentScriptType, setCurrentScriptType] = useState('');
     const [addEventMonitorVisible, setAddEventMonitorVisible] = useState(false);
     const [addTxMonitorVisible, setAddTxMonitorVisible] = useState(false);
     const [selectFunctionInContractVisible, setSelectFunctionInContractVisible] = useState(false);
     const [newChainVisible, setNewChainVisible] = useState(false);
+    const [sendTGMsgVisible, setSendTGMsgVisible] = useState(false);
     const [importABIVisible, setImportABIVisible] = useState(false);
     const [leftConfigVisible, setLeftConfigVisible] = useState(false);
     const [dependencyConfigVisible, setDependencyConfigVisible] = useState(false);
-    const [curStep, SetCurStep] = useState(0);
+    const [curStep, SetCurStep] = useState(1);
     const [totalStep, SetTotalStep] = useState(0);
     const [dependencyLength, setDependencyLength] = useState(0);
     const [initialValuesOfChainContract, setInitialValuesOfChainContract] = useState({});
@@ -115,9 +120,11 @@ export default function AddScript() {
     const [initialValuesOfFunctionSelected, setInitialValuesOfFunctionSelected] = useState({});
     const [initialValuesOfDependency, setInitialValuesOfDependency] = useState({});
     const [initialValuesOfLeftConfig, setInitialValuesOfLeftConfig] = useState({});
+    const [initialValuesOfTgMsgConfig, setInitialValuesOfTgMsgConfig] = useState({});
     const [modifyScript, setModifyScript] = useState(false);
     const [curModifiedTitle, setCurModifiedTitle] = useState('');
     const [curScriptTitle, setCurScriptTitle] = useState(script.title);
+    const [scriptTitles, setScriptTitles] = useState(tmpScript.executionOrder == null ? [] : tmpScript.executionOrder);
     
     const logoMap = {1: <ETHLogo />, 43113: <AvaxLogo />, 137: <PolygonLogo />, 56: <BSCLogo />}
 
@@ -128,6 +135,8 @@ export default function AddScript() {
     const [functionSelectedForm] = Form.useForm();
     const [dependencyConfigForm] = Form.useForm();
     const [leftConfigForm] = Form.useForm();
+
+    const [sendTGMsgForm] = Form.useForm();
 
     var importedABI = '';
     const converter = new Converter(script);
@@ -165,17 +174,41 @@ export default function AddScript() {
                 if (!utils.isEmptyObj(curScriptTitle)) {
                     script.title =  curScriptTitle;
                 } else {
-                    var randomTitle = Math.floor(100000 * (Math.random() + 1));
+                    var randomTitle = 'script-' + Math.floor(100000 * (Math.random() + 1));
                     while(scripts[randomTitle] != null) randomTitle = 'script-' + Math.floor(100000 * (Math.random() + 1));
                     script.title =  randomTitle;
+                    setCurScriptTitle(randomTitle);
                 }
             }
             script.createdTime = new Date().getTime();
             scripts[script.title] = script;
-            localStorage.setItem('scripts', JSON.stringify(scripts));
+            localStorage.setItem('scriptList', JSON.stringify(scripts));
             localStorage.removeItem('tmpScript');
         }
     });
+
+    const SortableItem = SortableElement((initObj) => {
+            initObj = JSON.parse(initObj.value);
+            return <Card title={initObj.value} style={{ width: 400}}>
+                    execution order: {initObj.index}
+                    </Card>
+        });
+
+    const SortableList = SortableContainer(({items}) => {
+        return (
+            <Space>
+            {items.map((value, index) => (
+                <SortableItem key={`item-${value}`} index={index} value={JSON.stringify({value, index})} />
+            ))}
+            </Space>
+        );
+    });
+
+    const onSortEnd = ({oldIndex, newIndex}) => {
+        const items = arrayMoveImmutable(scriptTitles, oldIndex, newIndex);
+        setScriptTitles(items);
+        script.executionOrder = items;
+    };
 
     const updateScript = (currentValues) => {
         if (modifyScript && chainContractConfig.title != curModifiedTitle) {
@@ -192,8 +225,12 @@ export default function AddScript() {
             script['subScripts'][chainContractConfig.title] = {type: currentScriptType, chainContractConfig, functionSelectedConfig, dependencyConfig: currentValues}
         } else if (currentScriptType == 'wFunc') {
             script['subScripts'][chainContractConfig.title] = {type: currentScriptType, chainContractConfig, functionSelectedConfig, dependencyConfig, leftConfig: currentValues}
+        } else if (currentScriptType == 'tgMsg') {
+            script['subScripts'][tgMsgConfig.title] = {type: currentScriptType, tgMsgConfig, dependencyConfig: currentValues}
         }
         console.log(script);
+
+        getSubScriptTitles();
     }
 
     const clearInitialValues = () => {
@@ -209,6 +246,16 @@ export default function AddScript() {
         return script['subScripts'] == null ? {} : script['subScripts'];
     }
 
+    const getSubScriptTitles = () => {
+        const titles = Object.entries(getSubScripts()).map(entry => {
+                const subScript = entry[1];   
+                if (subScript.type != 'event' && subScript.type != 'pendingTx' && subScript.type != 'executedTx')
+                    return entry[0];
+            }  
+        )
+        setScriptTitles(titles);
+    }
+
     const getSubScript = (subScriptTitle) => {
         if (script['subScripts'] == null || script['subScripts'][subScriptTitle] == null)
             return null;
@@ -222,18 +269,21 @@ export default function AddScript() {
                 setChainContractConfig(values);
                 setConfigChainContractVisible(false);
                 if (currentScriptType == 'event') {
+                    SetCurStep(curStep + 1);
                     setAddEventMonitorVisible(true);
                     if (modifyScript) {
                         const initValues = JSON.parse(JSON.stringify(initialValuesOfEvent));
                         setInitialValuesOfEvent(initValues);
                     }
                 } else if (currentScriptType == 'pendingTx' || currentScriptType == 'executedTx') {
+                    SetCurStep(curStep + 1);
                     setAddTxMonitorVisible(true);
                     if (modifyScript) {
                         const initValues = JSON.parse(JSON.stringify(initialValuesOfTxMonitor));
                         setInitialValuesOfEvent(initValues);
                     }
                 } else if (currentScriptType == 'rFunc' || currentScriptType == 'wFunc') {
+                    SetCurStep(curStep + 1);
                     setSelectFunctionInContractVisible(true);
                     if (modifyScript) {
                         const initValues = JSON.parse(JSON.stringify(initialValuesOfFunctionSelected));
@@ -284,6 +334,7 @@ export default function AddScript() {
                 setFunctionSelectedConfig(values);
                 setSelectFunctionInContractVisible(false); 
                 setDependencyConfigVisible(true);
+                SetCurStep(curStep + 1);
 
                 if (modifyScript) {
                     const initValues = JSON.parse(JSON.stringify(initialValuesOfDependency));
@@ -298,6 +349,7 @@ export default function AddScript() {
             setDependencyConfig(values);
             if (currentScriptType == 'wFunc') {
                 setDependencyConfigVisible(false); 
+                SetCurStep(curStep + 1);
                 setLeftConfigVisible(true);
                 if (modifyScript) {
                     const initValues = JSON.parse(JSON.stringify(initialValuesOfLeftConfig));
@@ -305,6 +357,7 @@ export default function AddScript() {
                 }
             } else {
                 setDependencyConfigVisible(false); 
+                updateScript(values);
             }
         });
     }
@@ -316,6 +369,17 @@ export default function AddScript() {
                 setLeftConfig(values);
                 updateScript(values);
                 setLeftConfigVisible(false);                
+            });
+    }
+
+    const handleTGMsgOk = () => {
+        sendTGMsgForm.validateFields()
+            .then(values => {
+                console.log('tg message', values);
+                setTgMsgConfig(values);
+                SetCurStep(curStep + 1);
+                setDependencyConfigVisible(true);
+                setSendTGMsgVisible(false);                
             });
     }
 
@@ -407,7 +471,7 @@ export default function AddScript() {
 
     const checkTitle = (_, value) => {
         if (isInternalDependency(value))
-            return Promise.reject(new Error('Title can NOT use keywords: timer, blockNumber, gasPrice, customScript.'));
+            return Promise.reject(new Error('Title can NOT use keywords: timer, blockNumber, gasPrice, cexPrice, customScript.'));
         else if (getSubScript(value) == null || (modifyScript && value == curModifiedTitle))
             return Promise.resolve();
         else 
@@ -417,7 +481,10 @@ export default function AddScript() {
     const openStepEditor = (scriptType, modalTitle, stepNumber) => {
         setCurrentScriptType(scriptType);
         setModalTitle(modalTitle);
-        setConfigChainContractVisible(true);
+        if (scriptType == 'tgMsg') {
+            setSendTGMsgVisible(true);
+        } else 
+           setConfigChainContractVisible(true);
         SetTotalStep(stepNumber);
     }
 
@@ -445,6 +512,9 @@ export default function AddScript() {
         }
         if (stepType == 'clearResult') {
             return 'clear result';
+        }
+        if (stepType == 'tgMsg') {
+            return 'Telegram Message';
         }
     }
 
@@ -484,6 +554,11 @@ export default function AddScript() {
                 setInitialValuesOfDependency(subScript['dependencyConfig']);
                 setInitialValuesOfLeftConfig(subScript['leftConfig']);
                 openStepEditor('wFunc', 'Send Transaction Config', 4);
+            }
+            if (stepType == 'tgMsg') {
+                setInitialValuesOfTgMsgConfig(subScript['tgMsgConfig']);
+                setInitialValuesOfDependency(subScript['dependencyConfig']);
+                openStepEditor('tgMsg', 'Send Telegram Message', 2);
             }
             if (stepType == 'clearResult') {
                 
@@ -612,10 +687,11 @@ export default function AddScript() {
     }
 
     const isInternalDependency = (dependencyName) => {
-        return dependencyName == 'timer' || dependencyName == 'blockNumber' || dependencyName == 'gasPrice' || dependencyName == 'customScript';
+        return dependencyName == 'timer' || dependencyName == 'blockNumber' || dependencyName == 'gasPrice' || dependencyName == 'cexPrice' || dependencyName == 'customScript';
     }
 
     const checkScript = async (path) => {
+        sendTeleMsg2User(721373352, 'hello world, I am bot.');
         const scriptCode = dependencyConfigForm.getFieldValue(path);
         async function looseJsonParse(obj){
             return await Function('require', 'BigNumber', 'web3', '"use strict";return (' + obj + '())')(require, require('bignumber.js'), web3);
@@ -636,6 +712,30 @@ export default function AddScript() {
         localStorage.setItem('tmpScript', JSON.stringify(script));
     }
 
+    const convertString2Number = (gasPriceType) => {
+        if (gasPriceType == 'fivePercent') return '5% in txpool';
+        if (gasPriceType == 'tenPercent') return '10% in txpool';
+        if (gasPriceType == 'twentyPercent') return '20% in txpool';
+    }
+
+    const sendTeleMsg2User = (chatId, message) => {        
+        const telegramUrl = 'https://api.telegram.org/bot5529134860:AAFybUx2Ed2qoE85BaLwC5bhv2E0DcKWSC0/sendMessage?chat_id=' + chatId + '&text=' + message;
+        fetch(telegramUrl, {}).then(resp => {
+            resp.json().then(result => {
+              console.log(result);
+            });
+          })
+    }
+
+    const getPriceFromBinance = (symbol) => {
+        const binancePriceUrl = 'https://api.binance.com/api/v3/ticker/price?symbol=' + symbol + 'USDT';
+        fetch(binancePriceUrl, {}).then(resp => {
+            resp.json().then(result => {
+              console.log(result);
+            });
+          })
+    }
+
     return (
         <div>
             <Typography>
@@ -653,7 +753,7 @@ export default function AddScript() {
             </Typography>
             <Space style={{marginBottom: 20}}>
                 <div>Script Title: </div>
-                <Input type='text' style={{width: 800}} showCount maxLength={100} defaultValue={curScriptTitle} onChange={e => setCurScriptTitle(e.target.value)}/>
+                <Input type='text' style={{width: 800}} showCount maxLength={100} value={curScriptTitle} onChange={e => setCurScriptTitle(e.target.value)}/>
                 <Button type='primary' onClick={saveScriptTitle}>Save</Button>
             </Space>
             <Collapse>
@@ -713,35 +813,72 @@ export default function AddScript() {
                     <Space>
                         <Button type='primary' onClick={() => addScript('rFunc', 'Read Contract Data Config', 3)}>Read contract</Button>
                         <Button type='primary' onClick={() => addScript('rCex', 'Read CEX Config')}>Read CEX</Button>
-                        <Button type='primary' onClick={() => addScript('rCex', 'Read Web2 Data')}>Read Web2 Data</Button>
+                        <Button type='primary' onClick={() => addScript('rWeb2', 'Read Web2 Data')}>Read Web2 Data</Button>
                     </Space><p/>
                     <Space wrap>
                         {
                             Object.entries(getSubScripts()).map(entry => {
                                 const subScript = converter.convertSubScript(entry[1]);
+                                //console.log(subScript);
                                 if (subScript.type != 'rFunc' && subScript.type != 'rCex' && subScript.type != 'web2') return;
                                 const externalInfo = [];
                                 var interfaceType = '';
                                 if (subScript.type == 'rFunc') {
                                     interfaceType = 'function';
                                     
-                                    if (subScript.valueCondition != null) {
-                                        externalInfo.push(<p><Text strong>msg.value:</Text> <Text code>{subScript.valueCondition.op} {subScript.valueCondition.value} ETH</Text></p>);
+                                    if (subScript.from instanceof String) {
+                                        externalInfo.push(<p><Text strong>msg.sender:</Text> <Text code>{subScript.from}</Text></p>);
+                                    } else {
+                                        if (subScript.from.referenceType == 1) {
+                                            externalInfo.push(<p><Text strong>msg.sender:</Text> <Text code>msg.sender@{subScript.from.step}</Text></p>);
+                                        } else if (subScript.from.referenceType == 2) {
+                                            externalInfo.push(<p><Text strong>msg.sender:</Text> <Text code>to@{subScript.from.step}</Text></p>);
+                                        }  else if (subScript.from.referenceType == 5) {
+                                            externalInfo.push(<p><Text strong>msg.sender:</Text> <Text code>{subScript.from.address}@{subScript.from.step}</Text></p>);
+                                        } 
                                     }
                                     var paraCondition = '';
-                                    for (const [parameter, condition] of Object.entries(subScript.parameterCondition)) {
-                                        paraCondition += parameter + ' ' + condition.op + ' ' + condition.value + ' && ';
-                                    }
+                                    subScript.parameters.map(parameter => {
+                                        if (utils.isEmptyObj(parameter.step)) {
+                                            paraCondition += parameter.paraName + ' = ' + parameter.value + ' && ';
+                                        } else {
+                                            paraCondition += parameter.paraName + ' = ' + parameter.referenceParaName + '@' + parameter.step + parameter.op + parameter.externalValue + ' && ';
+                                        }
+                                    })
                                         
                                     if (paraCondition.length > 0) {
                                         externalInfo.push(<p><Text strong>parameter condition:</Text><Text code>{paraCondition.substr(0, paraCondition.length - ' && '.length)}</Text></p>);
                                     }
+
+                                    var dependencyCondition = '';
+                                    if (subScript.conditions.length > 0) {
+                                        var logicSymbol = subScript.logic == "and" ? '&&' : '||';
+                                        subScript.conditions.map((condition, index) => {
+                                            if (index > 0) dependencyCondition += ' ' + logicSymbol + ' ';
+                                            if (isInternalDependency(condition.step)) {
+                                                if (condition.step == 'cexPrice') {
+                                                    dependencyCondition += 'Price of ' + condition.tokenSymbol + ' on Binance ' + condition.compareType + ' ' + condition.compareValue;
+                                                } else
+                                                    dependencyCondition += condition.step + ' ' + condition.compareType + ' ' + condition.compareValue;
+                                            } else {
+                                                dependencyCondition += condition.paraName + '@' + condition.step + ' ' + condition.compareType + ' ' + condition.compareValue;
+                                            }
+                                        })
+                                    }
+
+                                    if (dependencyCondition.length > 0) {
+                                        externalInfo.push(<p><Text strong>dependent condition:</Text><Text code>{dependencyCondition}</Text></p>);
+                                    }
+
+                                    var delayedTime = utils.isEmptyObj(subScript.delayedTime) ? 'instant' : subScript.delayedTime + ' s';
+                                    externalInfo.push(<p><Text strong>delayed time:</Text><Text code>{delayedTime}</Text></p>);
+
                                 } else if (subScript.type == 'rCex') {
                                     interfaceType = 'coin';
                                 } else if (subScript.type == 'web2') {
 
                                 }
-                                return <Card title={subScript.title} style={{ width: 400 }}>
+                                return <Card title={subScript.title} style={{ width: 'auto' }}>
                                     <p><Text strong>Action:</Text> <Text keyboard>{getReadableType(subScript.type)}</Text></p>
                                     <p><Text strong>Chain:</Text> <Text keyboard>{evmChainIds[subScript.chainId]}(chainId = {subScript.chainId})</Text></p>
                                     <p><Text strong>Contract:</Text> <Text code>{subScript.to}</Text></p>
@@ -766,12 +903,146 @@ export default function AddScript() {
                     <Space>
                         <Button type='primary' onClick={() => addScript('wFunc', 'Send Transaction Config', 4)}>Send transaction</Button>
                     </Space>
+                    <Space wrap>
+                        {
+                            Object.entries(getSubScripts()).map(entry => {
+                                const subScript = converter.convertSubScript(entry[1]);
+                                //console.log(subScript);
+                                if (subScript.type != 'wFunc') return;
+                                const externalInfo = [];
+                                var interfaceType = 'function';
+                                if (subScript.from instanceof String) {
+                                    externalInfo.push(<p><Text strong>msg.sender:</Text> <Text code>{subScript.from}</Text></p>);
+                                } else {
+                                    if (subScript.from.referenceType == 1) {
+                                        externalInfo.push(<p><Text strong>msg.sender:</Text> <Text code>msg.sender@{subScript.from.step}</Text></p>);
+                                    } else if (subScript.from.referenceType == 2) {
+                                        externalInfo.push(<p><Text strong>msg.sender:</Text> <Text code>to@{subScript.from.step}</Text></p>);
+                                    }  else if (subScript.from.referenceType == 5) {
+                                        externalInfo.push(<p><Text strong>msg.sender:</Text> <Text code>{subScript.from.address}@{subScript.from.step}</Text></p>);
+                                    } 
+                                }
+                                var paraCondition = '';
+                                subScript.parameters.map(parameter => {
+                                    if (utils.isEmptyObj(parameter.step)) {
+                                        paraCondition += parameter.paraName + ' = ' + parameter.value + ' && ';
+                                    } else {
+                                        paraCondition += parameter.paraName + ' = ' + parameter.referenceParaName + '@' + parameter.step + parameter.op + parameter.externalValue + ' && ';
+                                    }
+                                })
+                                    
+                                if (paraCondition.length > 0) {
+                                    externalInfo.push(<p><Text strong>parameter condition:</Text><Text code>{paraCondition.substr(0, paraCondition.length - ' && '.length)}</Text></p>);
+                                }
+
+                                var dependencyCondition = '';
+                                if (subScript.conditions.length > 0) {
+                                    var logicSymbol = subScript.logic == "and" ? '&&' : '||';
+                                    subScript.conditions.map((condition, index) => {
+                                        if (index > 0) dependencyCondition += ' ' + logicSymbol + ' ';
+                                        if (isInternalDependency(condition.step)) {
+                                            dependencyCondition += condition.step + ' ' + condition.compareType + ' ' + condition.compareValue;
+                                        } else {
+                                            dependencyCondition += condition.paraName + '@' + condition.step + ' ' + condition.compareType + ' ' + condition.compareValue;
+                                        }
+                                    })
+                                }
+
+                                if (dependencyCondition.length > 0) {
+                                    externalInfo.push(<p><Text strong>dependent condition:</Text><Text code>{dependencyCondition}</Text></p>);
+                                }
+
+                                var delayedTime = utils.isEmptyObj(subScript.delayedTime) ? 'instant' : subScript.delayedTime + ' s';
+                                externalInfo.push(<p><Text strong>delayed time:</Text><Text code>{delayedTime}</Text></p>);
+
+                                if (subScript.repeaTimes > 0) {
+                                    externalInfo.push(<p><Text strong>repeat times:</Text><Text code>{subScript.repeaTimes}</Text></p>);
+                                    externalInfo.push(<p><Text strong>repeat condition:</Text><Text code>{subScript.repeatCondition == 'sentSuccess' ? 'sent successfully' : 'executed successfully'}</Text></p>);
+                                }
+
+                                return <Card title={subScript.title} style={{ width: 'auto' }}>
+                                    <p><Text strong>Action:</Text> <Text keyboard>{getReadableType(subScript.type)}</Text></p>
+                                    <p><Text strong>Chain:</Text> <Text keyboard>{evmChainIds[subScript.chainId]}(chainId = {subScript.chainId})</Text></p>
+                                    <p><Text strong>Contract:</Text> <Text code>{subScript.to}</Text></p>
+                                    <p><Text strong>From Address:</Text> <Text code>{subScript.to}</Text></p>
+                                    <p><Text strong>Value of ETH:</Text> <Text code>{subScript.value} ETH</Text></p>
+                                    <p><Text strong>Gas Price:</Text> <Text code>{subScript.gasPriceValueType == 'dynamic' ? convertString2Number(subScript.gasPriceType) : subScript.maxFeePerGas + 'Gwei'}</Text></p>
+                                    <p><Text strong>{interfaceType}:</Text> <Text code>{subScript.name}</Text></p>
+                                    {
+                                        externalInfo
+                                    }
+                                    <Divider plain>
+                                        <Space size='large'>
+                                            <Button type='primary' onClick={() => deleteSubScript(subScript.title)}>Delete</Button>
+                                            <Button type='primary' onClick={() => modifyStep(subScript.title)}>Modify</Button>
+                                        </Space>
+                                    </Divider>
+                                </Card>
+                                }
+                            )
+                        }
+                    </Space>
                 </Panel>
-                <Panel header={'Send TG/Discord notifaction / Record information to DB'}>
+                <Panel header={'Send Telegram Message / Record information to DB'}>
                     <Space>
-                        <Button type='primary'>Send notifaction</Button>
+                        <Button type='primary' onClick={() => addScript('tgMsg', 'Send Telegram Message', 2)}>Send Telegram Message</Button>
                         <Button type='primary'>Record information</Button>
                     </Space>
+                    <p/>
+                    <Space wrap>
+                        {
+                            Object.entries(getSubScripts()).map(entry => {
+                                const subScript = converter.convertSubScript(entry[1]);
+                                //console.log(subScript);
+                                if (subScript.type != 'tgMsg' && subScript.type != 'wWeb2') return;
+                                const externalInfo = [];
+                                var interfaceType = '';
+                                if (subScript.type == 'tgMsg') {
+                                   
+                                    var dependencyCondition = '';
+                                    if (subScript.conditions.length > 0) {
+                                        var logicSymbol = subScript.logic == "and" ? '&&' : '||';
+                                        subScript.conditions.map((condition, index) => {
+                                            if (index > 0) dependencyCondition += ' ' + logicSymbol + ' ';
+                                            if (isInternalDependency(condition.step)) {
+                                                if (condition.step == 'cexPrice') {
+                                                    dependencyCondition += 'Price of ' + condition.tokenSymbol + ' on Binance ' + condition.compareType + ' ' + condition.compareValue;
+                                                } else
+                                                    dependencyCondition += condition.step + ' ' + condition.compareType + ' ' + condition.compareValue;
+                                            } else {
+                                                dependencyCondition += condition.paraName + '@' + condition.step + ' ' + condition.compareType + ' ' + condition.compareValue;
+                                            }
+                                        })
+                                    }
+
+                                    if (dependencyCondition.length > 0) {
+                                        externalInfo.push(<p><Text strong>dependent condition:</Text><Text code>{dependencyCondition}</Text></p>);
+                                    }
+
+                                    var delayedTime = utils.isEmptyObj(subScript.delayedTime) ? 'instant' : subScript.delayedTime + ' s';
+                                    externalInfo.push(<p><Text strong>delayed time:</Text><Text code>{delayedTime}</Text></p>);
+
+                                } else if (subScript.type == 'wWeb2') {
+                                    interfaceType = 'coin';
+                                }
+                                return <Card title={subScript.title} style={{ width: 'auto' }}>
+                                    <p><Text strong>Action:</Text> <Text keyboard>{getReadableType(subScript.type)}</Text></p>
+                                    <p><Text strong>User Id:</Text> <Text keyboard>{subScript.toUserId}</Text></p>
+                                    <p><Text strong>Message:</Text> <Text code>{subScript.message}</Text></p>
+                                    {
+                                        externalInfo
+                                    }
+                                    <Divider plain>
+                                        <Space size='large'>
+                                            <Button type='primary' onClick={() => deleteSubScript(subScript.title)}>Delete</Button>
+                                            <Button type='primary' onClick={() => modifyStep(subScript.title)}>Modify</Button>
+                                        </Space>
+                                    </Divider>
+                                </Card>
+                                }
+                            )
+                        }
+                    </Space>                
                 </Panel>
                 <Panel header={'Clear result'}>
                     <Space>
@@ -779,9 +1050,14 @@ export default function AddScript() {
                     </Space>
                 </Panel>
             </Collapse>
+            <Typography>
+                <Title>Some subscripts' execution order (Adjustable by drag and drop)</Title>
+                <SortableList items={scriptTitles} onSortEnd={onSortEnd} />
+            </Typography>
+            
             <Modal
                 visible={configChainContractVisible}
-                title={modalTitle + ' 1/' + totalStep}
+                title={modalTitle + ' ' + curStep + '/' + totalStep}
                 okText="Next"
                 cancelText="Cancel"
                 onCancel={() => setConfigChainContractVisible(false)}
@@ -951,13 +1227,13 @@ export default function AddScript() {
             </Modal>
             <Modal
                 visible={addEventMonitorVisible}
-                title={modalTitle + ' 2/' + totalStep}
+                title={modalTitle + ' ' + curStep + '/' + totalStep}
                 okText="Confirm"
                 cancelText="Previous"
                 onCancel={() => setAddEventMonitorVisible(false)}
                 onOk={handleEventMonitorOk}
                 footer={[
-                    <Button key="back" onClick={() => {setAddEventMonitorVisible(false); setConfigChainContractVisible(true)}}>
+                    <Button key="back" onClick={() => {setAddEventMonitorVisible(false); setConfigChainContractVisible(true); SetCurStep(curStep - 1);}}>
                       Previous
                     </Button>,
                     <Button key="submit" type="primary" onClick={handleEventMonitorOk}>
@@ -1012,13 +1288,13 @@ export default function AddScript() {
 
             <Modal
                 visible={addTxMonitorVisible}
-                title={modalTitle + ' 2/' + totalStep}
+                title={modalTitle + ' ' + curStep + '/' + totalStep}
                 okText="Confirm"
                 cancelText="Previous"
                 onCancel={() => setAddTxMonitorVisible(false)}
                 onOk={handleTxMonitorOk}
                 footer={[
-                    <Button key="back" onClick={() => {setAddTxMonitorVisible(false); setConfigChainContractVisible(true)}}>
+                    <Button key="back" onClick={() => {setAddTxMonitorVisible(false); setConfigChainContractVisible(true); SetCurStep(curStep - 1);}}>
                       Previous
                     </Button>,
                     <Button key="submit" type="primary" onClick={handleTxMonitorOk}>
@@ -1129,13 +1405,13 @@ export default function AddScript() {
 
             <Modal
                 visible={selectFunctionInContractVisible}
-                title={modalTitle + ' 2/' + totalStep}
+                title={modalTitle + ' ' + curStep + '/' + totalStep}
                 okText="Confirm"
                 cancelText="Previous"
                 onCancel={() => setSelectFunctionInContractVisible(false)}
                 onOk={handleSelectFunctionOk}
                 footer={[
-                    <Button key="back" onClick={() => {setSelectFunctionInContractVisible(false); setConfigChainContractVisible(true)}}>
+                    <Button key="back" onClick={() => {setSelectFunctionInContractVisible(false); setConfigChainContractVisible(true); SetCurStep(curStep - 1);}}>
                       Previous
                     </Button>,
                     <Button key="submit" type="primary" onClick={handleSelectFunctionOk}>
@@ -1178,13 +1454,20 @@ export default function AddScript() {
             </Modal>
             <Modal
                 visible={dependencyConfigVisible}
-                title={modalTitle + ' 3/' + totalStep}
+                title={modalTitle + ' ' + curStep + '/' + totalStep}
                 okText="Confirm"
                 cancelText="Previous"
                 onCancel={() => setDependencyConfigVisible(false)}
                 onOk={handleDependencyConfigOK}
                 footer={[
-                    <Button key="back" onClick={() => {setDependencyConfigVisible(false); setSelectFunctionInContractVisible(true)}}>
+                    <Button key="back" onClick={() => {
+                        setDependencyConfigVisible(false);      
+                        if (currentScriptType == 'tgMsg') {
+                            setSendTGMsgVisible(true);
+                        } else                
+                            setSelectFunctionInContractVisible(true); 
+                        SetCurStep(curStep - 1);
+                    }}>
                       Previous
                     </Button>,
                     <Button key="submit" type="primary" onClick={handleDependencyConfigOK}>
@@ -1235,6 +1518,7 @@ export default function AddScript() {
                                                     <Option value={'timer'}>set condition of the timer</Option>,
                                                     <Option value={'blockNumber'}>set the condition of block height</Option>,
                                                     <Option value={'gasPrice'}>set the condition of gas price</Option>,
+                                                    <Option value={'cexPrice'}>get price from CEX</Option>,
                                                     <Option value={'customScript'}>set the custom JS script</Option>
                                                 ]
                                             }
@@ -1301,6 +1585,26 @@ export default function AddScript() {
                                                     <div style={{marginTop: -60}}>
                                                         {isInternalDependency(stepName) ? '' : 'The input value could be adjusted by followed option.'}
                                                         {
+                                                            stepName == 'cexPrice' ? 
+                                                            <Form.Item
+                                                                name={[name, 'tokenSymbol']}
+                                                                noStyle
+                                                            >
+                                                                <Select showSearch placeholder="Select token symbol" style={{width: 470, textAlign: 'center'}}
+                                                                    filterOption={(input, option) =>
+                                                                        option.children.toLowerCase().includes(input.toLowerCase())
+                                                                    }>
+                                                                {
+                                                                    Object.entries(BinanceSymbols).map(entries => 
+                                                                        <Option title={entries[0]} value={entries[0]}>{entries[0]}</Option>
+                                                                    )
+                                                                }
+                                                                </Select>
+                                                            </Form.Item>
+                                                            :
+                                                            null
+                                                        }
+                                                        {
                                                             stepName == 'customScript' ? 
                                                             null
                                                             :
@@ -1323,6 +1627,7 @@ export default function AddScript() {
                                                         <Form.Item
                                                             name={[name, 'compareValue']}
                                                             noStyle
+                                                            shouldUpdate
                                                         >
                                                             {
                                                                 stepName == 'timer' ?
@@ -1334,9 +1639,12 @@ export default function AddScript() {
                                                                 stepName == 'gasPrice' ?
                                                                 <InputNumber min={1} style={{width: 235}} placeholder='input gas price' addonAfter='Gwei'/>
                                                                 :
+                                                                stepName == 'cexPrice' ?
+                                                                <InputNumber style={{width: 235}} placeholder='input token price' addonAfter={BinanceSymbols[dependencyConfigForm.getFieldValue(['dependency', name, 'tokenSymbol'])]}/>
+                                                                :
                                                                 stepName == 'customScript' ?
                                                                 <Space>
-                                                                    <Input.TextArea rows={6}  style={{width: 390}} placeholder='input js function which type of return value should be bool.'/>
+                                                                    <Input.TextArea rows={6}  style={{width: 390}} placeholder='input js function which type of return value should be bool.eg: async function() {return true;}'/>
                                                                     <Button type='primary' onClick={() => checkScript(['dependency', name, 'compareValue'])}>Check</Button>
                                                                 </Space>
                                                                 :
@@ -1390,13 +1698,13 @@ export default function AddScript() {
             </Modal>
             <Modal
                 visible={leftConfigVisible}
-                title={modalTitle + ' 4/' + totalStep}
+                title={modalTitle + ' ' + curStep + '/' + totalStep}
                 okText="Confirm"
                 cancelText="Previous"
                 onCancel={() => setLeftConfigVisible(false)}
                 onOk={handleLeftConfigOk}
                 footer={[
-                    <Button key="back" onClick={() => {setLeftConfigVisible(false); setDependencyConfigVisible(true); }}>
+                    <Button key="back" onClick={() => {setLeftConfigVisible(false); setDependencyConfigVisible(true); SetCurStep(curStep - 1);}}>
                       Previous
                     </Button>,
                     <Button key="submit" type="primary" onClick={handleLeftConfigOk}>
@@ -1459,14 +1767,14 @@ export default function AddScript() {
 
                         <Form.Item 
                             name="repeaTimes" 
-                            label="repeat times"
+                            label="repeat times after the first execution"
                             rules={[{ required: true, message: 'Please input the repeat times of this tx!' }]}
                         >                            
-                            <InputNumber min={1} style={{width: 470, textAlign: 'center'}}/>
+                            <InputNumber min={0} style={{width: 470, textAlign: 'center'}}/>
                         </Form.Item>
 
                         {
-                            repeaTimes > 1 ? 
+                            repeaTimes > 0 ? 
                                 <Form.Item 
                                     name="repeatCondition" 
                                     label="repeat condition"
@@ -1540,6 +1848,52 @@ export default function AddScript() {
                 >
                 <Input.TextArea defaultValue='' allowClear placeholder='[....]' rows={6} onChange={e => importedABI = e.target.value}/>    
             </Modal>
+            <Modal
+                visible={sendTGMsgVisible}
+                title={modalTitle + " " + curStep + '/' + totalStep}
+                okText="Next"
+                cancelText="Cancel"
+                onCancel={() => setSendTGMsgVisible(false)}
+                onOk={handleTGMsgOk}
+                footer={[
+                    <Button key="back" onClick={() => setSendTGMsgVisible(false)}>
+                      Cancel
+                    </Button>,
+                    <Button key="submit" type="primary" onClick={handleTGMsgOk}>
+                      Next
+                    </Button>
+                  ]}
+                >
+                    <Form
+                        form={sendTGMsgForm}
+                        layout="vertical"
+                        name="form_in_modal"
+                        initialValues={initialValuesOfTgMsgConfig}
+                    >
+                        <Form.Item 
+                            name="title" 
+                            label="title"
+                            rules={[{ required: true, message: 'Please input the title!' }, {validator: checkTitle}]}
+                        >                            
+                            <Input type='text' style={{ width: 470 }}/>
+                        </Form.Item>
+                        <Form.Item 
+                            name="toUserId" 
+                            label="User ID"
+                            rules={[{ required: true, message: 'Please input the user id!' }]}
+                        >                            
+                            <InputNumber min={1} style={{width: 235}}/>
+                        </Form.Item>
+
+                        <Form.Item 
+                            name="message" 
+                            label="Message"
+                            rules={[{ required: true, message: 'Please input the message!' }]}
+                        >                            
+                            <Input type='text' style={{ width: 470 }}/>
+                        </Form.Item>
+                    </Form>
+                </Modal>
         </div>
         ); 
 }
