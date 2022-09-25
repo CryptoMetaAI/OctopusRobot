@@ -177,10 +177,24 @@ export default class Converter {
         return tgMsg;
     }
 
+    convertClearResultConfig(clearResultConfig) {
+        const clearResult = {
+            title: clearResultConfig.title,
+            subscriptTitle: clearResultConfig.subscript
+        }
+        return clearResult;
+    }
+
     convertTgMsg(subScript) {
         const tgMsg = this.convertTgMsgConfig(subScript.tgMsgConfig);
         const dependencyInfo = this.convertDependency(subScript.dependencyConfig);
         return {...tgMsg, ...dependencyInfo}
+    }
+
+    convertClearResult(subScript) {
+        const clearResultConfig = this.convertClearResultConfig(subScript.clearResultConfig);
+        const dependencyInfo = this.convertDependency(subScript.dependencyConfig);
+        return {...clearResultConfig, ...dependencyInfo}
     }
 
     convertSubScript(subScript) {
@@ -196,6 +210,8 @@ export default class Converter {
             result = this.convertWFunc(subScript);
         } else if (currentScriptType == 'tgMsg') {
             result = this.convertTgMsg(subScript);
+        } else if (currentScriptType == 'clearResult') {
+            result = this.convertClearResult(subScript);
         }
         result.type = subScript.type;
         return result;

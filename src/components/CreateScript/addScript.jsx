@@ -13,7 +13,7 @@ import BinanceSymbols from './asset/BinanceAssetList.json';
 
 import { AvaxLogo, PolygonLogo, BSCLogo, ETHLogo } from "./Logos";
 import assert from 'assert';
-
+import './CreateScript.css';
 
 //import * as utils from '../../utils/utils'; 
 const { Panel } = Collapse;
@@ -101,6 +101,7 @@ export default function AddScript() {
     const [dependencyConfig, setDependencyConfig] = useState({});
     const [leftConfig, setLeftConfig] = useState({});
     const [tgMsgConfig, setTgMsgConfig] = useState({});
+    const [clearResultConfig, setClearResultConfig] = useState({});
     const [modalTitle, setModalTitle] = useState('');
     const [currentScriptType, setCurrentScriptType] = useState('');
     const [addEventMonitorVisible, setAddEventMonitorVisible] = useState(false);
@@ -108,6 +109,7 @@ export default function AddScript() {
     const [selectFunctionInContractVisible, setSelectFunctionInContractVisible] = useState(false);
     const [newChainVisible, setNewChainVisible] = useState(false);
     const [sendTGMsgVisible, setSendTGMsgVisible] = useState(false);
+    const [clearResultVisible, setClearResultVisible] = useState(false);
     const [importABIVisible, setImportABIVisible] = useState(false);
     const [leftConfigVisible, setLeftConfigVisible] = useState(false);
     const [dependencyConfigVisible, setDependencyConfigVisible] = useState(false);
@@ -121,6 +123,7 @@ export default function AddScript() {
     const [initialValuesOfDependency, setInitialValuesOfDependency] = useState({});
     const [initialValuesOfLeftConfig, setInitialValuesOfLeftConfig] = useState({});
     const [initialValuesOfTgMsgConfig, setInitialValuesOfTgMsgConfig] = useState({});
+    const [initialValuesOfClearResult, setInitialValuesOfClearResult] = useState({});
     const [modifyScript, setModifyScript] = useState(false);
     const [curModifiedTitle, setCurModifiedTitle] = useState('');
     const [curScriptTitle, setCurScriptTitle] = useState(script.title);
@@ -137,6 +140,7 @@ export default function AddScript() {
     const [leftConfigForm] = Form.useForm();
 
     const [sendTGMsgForm] = Form.useForm();
+    const [clearResultForm] = Form.useForm();
 
     var importedABI = '';
     const converter = new Converter(script);
@@ -156,13 +160,17 @@ export default function AddScript() {
         pendingTxMonitorForm.resetFields();
         functionSelectedForm.resetFields();
         dependencyConfigForm.resetFields();
+        sendTGMsgForm.resetFields();
         leftConfigForm.resetFields();
+        clearResultForm.resetFields();
     }, [initialValuesOfChainContract, 
         initialValuesOfEvent, 
         initialValuesOfTxMonitor, 
         initialValuesOfFunctionSelected,
         initialValuesOfDependency,
-        initialValuesOfLeftConfig]);
+        initialValuesOfLeftConfig,
+        initialValuesOfTgMsgConfig,
+        initialValuesOfClearResult]);
 
     useEffect(() => {
         return function () {
@@ -196,11 +204,11 @@ export default function AddScript() {
 
     const SortableList = SortableContainer(({items}) => {
         return (
-            <Space>
+            <div className="container">
             {items.map((value, index) => (
                 <SortableItem key={`item-${value}`} index={index} value={JSON.stringify({value, index})} />
             ))}
-            </Space>
+            </div>
         );
     });
 
@@ -227,10 +235,12 @@ export default function AddScript() {
             script['subScripts'][chainContractConfig.title] = {type: currentScriptType, chainContractConfig, functionSelectedConfig, dependencyConfig, leftConfig: currentValues}
         } else if (currentScriptType == 'tgMsg') {
             script['subScripts'][tgMsgConfig.title] = {type: currentScriptType, tgMsgConfig, dependencyConfig: currentValues}
+        } else if (currentScriptType == 'clearResult') {
+            script['subScripts'][clearResultConfig.title] = {type: currentScriptType, clearResultConfig, dependencyConfig: currentValues}
         }
         console.log(script);
 
-        getSubScriptTitles();
+        updateSubScriptTitles();
     }
 
     const clearInitialValues = () => {
@@ -240,20 +250,25 @@ export default function AddScript() {
         setInitialValuesOfTxMonitor({});
         setInitialValuesOfDependency({});
         setInitialValuesOfLeftConfig({});
+        setTgMsgConfig({});
+        setClearResultConfig({});
     }
 
     const getSubScripts = () => {
         return script['subScripts'] == null ? {} : script['subScripts'];
     }
 
-    const getSubScriptTitles = () => {
-        const titles = Object.entries(getSubScripts()).map(entry => {
+    const updateSubScriptTitles = () => {
+        let titles = Object.entries(getSubScripts()).map(entry => {
                 const subScript = entry[1];   
                 if (subScript.type != 'event' && subScript.type != 'pendingTx' && subScript.type != 'executedTx')
                     return entry[0];
             }  
-        )
+        ).filter(item => item != null);
+        const newTitles = titles.filter(title => !scriptTitles.includes(title));
+        titles = scriptTitles.filter(title => titles.includes(title)).concat(newTitles);
         setScriptTitles(titles);
+        script.executionOrder = titles;
     }
 
     const getSubScript = (subScriptTitle) => {
@@ -383,6 +398,17 @@ export default function AddScript() {
             });
     }
 
+    const handleClearResultOk = () => {
+        clearResultForm.validateFields()
+            .then(values => {
+                console.log('clear result message', values);
+                setClearResultConfig(values);
+                SetCurStep(curStep + 1);
+                setDependencyConfigVisible(true);
+                setClearResultVisible(false);                
+            });
+    }
+
     const addNewChain = () => {
         setNewChainVisible(true);
     }
@@ -483,8 +509,11 @@ export default function AddScript() {
         setModalTitle(modalTitle);
         if (scriptType == 'tgMsg') {
             setSendTGMsgVisible(true);
-        } else 
+        } else if (scriptType == 'clearResult') {
+            setClearResultVisible(true);
+        } else {
            setConfigChainContractVisible(true);
+        }
         SetTotalStep(stepNumber);
     }
 
@@ -522,6 +551,7 @@ export default function AddScript() {
         delete script['subScripts'][subScriptTitle];
         const tmpScript = JSON.parse(JSON.stringify(script));
         setScript(tmpScript);
+        updateSubScriptTitles();
     }
 
     const modifyStep = (subScriptTitle) => {
@@ -531,25 +561,29 @@ export default function AddScript() {
             setCurModifiedTitle(subScriptTitle);
             const subScript = subScripts[subScriptTitle];
             const stepType = subScript.type;
-            setInitialValuesOfChainContract(subScript['chainContractConfig']);
             if (stepType == 'event') {
+                setInitialValuesOfChainContract(subScript['chainContractConfig']);
                 setInitialValuesOfEvent(subScript['eventConfig']);
                 openStepEditor('event', 'Event Config', 2);
             }
             if (stepType == 'pendingTx') {
+                setInitialValuesOfChainContract(subScript['chainContractConfig']);
                 setInitialValuesOfTxMonitor(subScript['txMonitorConfig']);
                 openStepEditor('pendingTx', 'Transaction Config(in mempool)', 2);
             }
             if (stepType == 'executedTx') {
+                setInitialValuesOfChainContract(subScript['chainContractConfig']);
                 setInitialValuesOfTxMonitor(subScript['txMonitorConfig']);
                 openStepEditor('executedTx', 'Transaction Config(in latest block)', 2);
             }
             if (stepType == 'rFunc') {
+                setInitialValuesOfChainContract(subScript['chainContractConfig']);
                 setInitialValuesOfFunctionSelected(subScript['functionSelectedConfig']);
                 setInitialValuesOfDependency(subScript['dependencyConfig']);
                 openStepEditor('rFunc', 'Read Contract Data Config', 3);
             }
             if (stepType == 'wFunc') {
+                setInitialValuesOfChainContract(subScript['chainContractConfig']);
                 setInitialValuesOfFunctionSelected(subScript['functionSelectedConfig']);
                 setInitialValuesOfDependency(subScript['dependencyConfig']);
                 setInitialValuesOfLeftConfig(subScript['leftConfig']);
@@ -564,6 +598,7 @@ export default function AddScript() {
                 
             }
         }
+        updateSubScriptTitles();
     }
 
     const isSameOrSimiliarType = (firstType, secondType) => {
@@ -1046,8 +1081,56 @@ export default function AddScript() {
                 </Panel>
                 <Panel header={'Clear result'}>
                     <Space>
-                        <Button type='primary'>Clear Result</Button>
+                        <Button type='primary' onClick={() => addScript('clearResult', 'Clear the result of other subscripts', 2)}>Clear Result</Button>
                     </Space>
+                    <p/>
+                    <Space wrap>
+                        {
+                            Object.entries(getSubScripts()).map(entry => {
+                                const subScript = converter.convertSubScript(entry[1]);
+                                //console.log(subScript);
+                                if (subScript.type != 'clearResult') return;
+                                const externalInfo = [];
+                                var interfaceType = '';
+                                var dependencyCondition = '';
+                                if (subScript.conditions.length > 0) {
+                                    var logicSymbol = subScript.logic == "and" ? '&&' : '||';
+                                    subScript.conditions.map((condition, index) => {
+                                        if (index > 0) dependencyCondition += ' ' + logicSymbol + ' ';
+                                        if (isInternalDependency(condition.step)) {
+                                            if (condition.step == 'cexPrice') {
+                                                dependencyCondition += 'Price of ' + condition.tokenSymbol + ' on Binance ' + condition.compareType + ' ' + condition.compareValue;
+                                            } else
+                                                dependencyCondition += condition.step + ' ' + condition.compareType + ' ' + condition.compareValue;
+                                        } else {
+                                            dependencyCondition += condition.paraName + '@' + condition.step + ' ' + condition.compareType + ' ' + condition.compareValue;
+                                        }
+                                    })
+                                }
+
+                                if (dependencyCondition.length > 0) {
+                                    externalInfo.push(<p><Text strong>dependent condition:</Text><Text code>{dependencyCondition}</Text></p>);
+                                }
+
+                                var delayedTime = utils.isEmptyObj(subScript.delayedTime) ? 'instant' : subScript.delayedTime + ' s';
+                                externalInfo.push(<p><Text strong>delayed time:</Text><Text code>{delayedTime}</Text></p>);
+                                return <Card title={subScript.title} style={{ width: 'auto' }}>
+                                    <p><Text strong>Action:</Text> <Text keyboard>{getReadableType(subScript.type)}</Text></p>
+                                    <p><Text strong>subscript title:</Text> <Text keyboard>{subScript.subscriptTitle}</Text></p>
+                                    {
+                                        externalInfo
+                                    }
+                                    <Divider plain>
+                                        <Space size='large'>
+                                            <Button type='primary' onClick={() => deleteSubScript(subScript.title)}>Delete</Button>
+                                            <Button type='primary' onClick={() => modifyStep(subScript.title)}>Modify</Button>
+                                        </Space>
+                                    </Divider>
+                                </Card>
+                                }
+                            )
+                        }
+                    </Space>  
                 </Panel>
             </Collapse>
             <Typography>
@@ -1891,6 +1974,50 @@ export default function AddScript() {
                             rules={[{ required: true, message: 'Please input the message!' }]}
                         >                            
                             <Input type='text' style={{ width: 470 }}/>
+                        </Form.Item>
+                    </Form>
+                </Modal>
+            <Modal
+                visible={clearResultVisible}
+                title={modalTitle + " " + curStep + '/' + totalStep}
+                okText="Next"
+                cancelText="Cancel"
+                onCancel={() => setClearResultVisible(false)}
+                onOk={handleClearResultOk}
+                footer={[
+                    <Button key="back" onClick={() => setClearResultVisible(false)}>
+                    Cancel
+                    </Button>,
+                    <Button key="submit" type="primary" onClick={handleClearResultOk}>
+                    Next
+                    </Button>
+                ]}
+                >
+                    <Form
+                        form={clearResultForm}
+                        layout="vertical"
+                        name="form_in_modal"
+                        initialValues={initialValuesOfClearResult}
+                    >
+                        <Form.Item 
+                            name="title" 
+                            label="title"
+                            rules={[{ required: true, message: 'Please input the title!' }, {validator: checkTitle}]}
+                        >                            
+                            <Input type='text' style={{ width: 470 }}/>
+                        </Form.Item>
+                        <Form.Item 
+                            name="subscript" 
+                            label="subscript"
+                            rules={[{ required: true, message: 'Please select the subscript which result will be cleared' }]}
+                        >                            
+                            <Select placeholder="Select subScript" style={{width: 470, textAlign: 'center'}}>
+                                {
+                                    Object.entries(getSubScripts()).map(entry => 
+                                        <Option title={entry[0]} value={entry[0]}>{entry[0]}</Option>
+                                    )
+                                }
+                            </Select>
                         </Form.Item>
                     </Form>
                 </Modal>

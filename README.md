@@ -1,7 +1,7 @@
 # What
 Octopus Robot dAPP is a totally decentralized application which can help you connect different blockchains or Web2 service. 
 
-In this dAPP, you can create and run scripts on frontend, and every script are combined from some sub-scripts which could be a web2 request with web service or a web3 interaction with node of blockchain.
+In this dAPP, you can create and run scripts on frontend, and every script is combined from some sub-scripts which could be a web2 request with web service or a web3 interaction with node of blockchain.
 
 For some examples, you can:
 
