@@ -25,7 +25,7 @@ const CreateScript = () => {
         }}
       >
         <Sider collapsible collapsed={collapsed} onCollapse={(value) => setCollapsed(value)}>
-          <div> <Button className="logo" type="primary">Connect Metamask</Button> </div>
+          {/* <div> <Button className="logo" type="primary">Connect Metamask</Button> </div> */}
           <Menu theme="dark" defaultSelectedKeys={['1']} mode="inline">
             <Menu.Item key="1">
                 <CodeOutlined />

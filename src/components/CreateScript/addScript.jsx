@@ -514,6 +514,7 @@ export default function AddScript() {
         } else {
            setConfigChainContractVisible(true);
         }
+        SetCurStep(1);
         SetTotalStep(stepNumber);
     }
 
@@ -938,6 +939,7 @@ export default function AddScript() {
                     <Space>
                         <Button type='primary' onClick={() => addScript('wFunc', 'Send Transaction Config', 4)}>Send transaction</Button>
                     </Space>
+                    <p/>
                     <Space wrap>
                         {
                             Object.entries(getSubScripts()).map(entry => {
